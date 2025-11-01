@@ -2687,11 +2687,64 @@ const DashboardView = ({
   onEditSale
 }: DashboardViewProps) => {
   const shiftSales = useMemo(() => {
-    if (!activeShift) return [];
+    if (!activeShift) return [] as Sale[];
     return sales
       .filter((sale) => sale.shiftId === activeShift.id)
       .sort((a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf());
   }, [sales, activeShift]);
+
+  const salesOnly = useMemo(() => shiftSales.filter((sale) => sale.type === "sale"), [shiftSales]);
+  const returns = useMemo(() => shiftSales.filter((sale) => sale.type === "return"), [shiftSales]);
+  const returnsTotal = useMemo(() => returns.reduce((acc, sale) => acc + sale.total, 0), [returns]);
+  const fiadoTotal = useMemo(
+    () => salesOnly.filter((sale) => sale.paymentMethod === "fiado").reduce((acc, sale) => acc + sale.total, 0),
+    [salesOnly]
+  );
+  const staffTotal = useMemo(
+    () => salesOnly.filter((sale) => sale.paymentMethod === "staff").reduce((acc, sale) => acc + sale.total, 0),
+    [salesOnly]
+  );
+
+  const paymentData = Object.entries(shiftSummary.byPayment)
+    .filter(([, value]) => value > 0)
+    .map(([method, value]) => {
+      const option = PAYMENT_OPTIONS.find((opt) => opt.id === method)!;
+      return {
+        name: option.label,
+        value,
+        method: method as PaymentMethod,
+        color: PAYMENT_COLORS[method as PaymentMethod]
+      };
+    });
+
+  const topProducts = useMemo(() => {
+    const productSales = new Map<string, { name: string; quantity: number; revenue: number }>();
+    salesOnly.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const existing = productSales.get(item.productId) || { name: item.name, quantity: 0, revenue: 0 };
+        productSales.set(item.productId, {
+          name: item.name,
+          quantity: existing.quantity + item.quantity,
+          revenue: existing.revenue + item.price * item.quantity
+        });
+      });
+    });
+    return Array.from(productSales.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+  }, [salesOnly]);
+
+  const lowStockSnapshot = products
+    .filter((product) => product.stock <= product.minStock)
+    .sort((a, b) => a.stock - b.stock)
+    .slice(0, 5);
+
+  const clientsWithDebt = clients
+    .filter((client) => client.balance > 0)
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 5);
+
+  const latestOperations = shiftSales.slice(0, 8);
 
   if (!activeShift) {
     const lowStockProducts = products.filter((product) => product.stock <= product.minStock).slice(0, 6);
@@ -2735,57 +2788,6 @@ const DashboardView = ({
       </Stack>
     );
   }
-
-  const salesOnly = shiftSales.filter((sale) => sale.type === "sale");
-  const returns = shiftSales.filter((sale) => sale.type === "return");
-  const returnsTotal = returns.reduce((acc, sale) => acc + sale.total, 0);
-  const fiadoTotal = salesOnly
-    .filter((sale) => sale.paymentMethod === "fiado")
-    .reduce((acc, sale) => acc + sale.total, 0);
-  const staffTotal = salesOnly
-    .filter((sale) => sale.paymentMethod === "staff")
-    .reduce((acc, sale) => acc + sale.total, 0);
-
-  const paymentData = Object.entries(shiftSummary.byPayment)
-    .filter(([, value]) => value > 0)
-    .map(([method, value]) => {
-      const option = PAYMENT_OPTIONS.find((opt) => opt.id === method)!;
-      return {
-        name: option.label,
-        value,
-        method: method as PaymentMethod,
-        color: PAYMENT_COLORS[method as PaymentMethod]
-      };
-    });
-
-  const topProducts = useMemo(() => {
-    const productSales = new Map<string, { name: string; quantity: number; revenue: number }>();
-    salesOnly.forEach((sale) => {
-      sale.items.forEach((item) => {
-        const existing = productSales.get(item.productId) || { name: item.name, quantity: 0, revenue: 0 };
-        productSales.set(item.productId, {
-          name: item.name,
-          quantity: existing.quantity + item.quantity,
-          revenue: existing.revenue + item.price * item.quantity
-        });
-      });
-    });
-    return Array.from(productSales.values())
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
-  }, [salesOnly]);
-
-  const lowStockSnapshot = products
-    .filter((product) => product.stock <= product.minStock)
-    .sort((a, b) => a.stock - b.stock)
-    .slice(0, 5);
-
-  const clientsWithDebt = clients
-    .filter((client) => client.balance > 0)
-    .sort((a, b) => b.balance - a.balance)
-    .slice(0, 5);
-
-  const latestOperations = shiftSales.slice(0, 8);
 
   return (
     <Stack gap="lg">
