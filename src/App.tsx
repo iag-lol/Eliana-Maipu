@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   AppShell,
+  Autocomplete,
   Badge,
   Button,
   Card,
@@ -36,7 +37,8 @@ import {
   ResponsiveContainer,
   Tooltip as ChartTooltip,
   XAxis,
-  YAxis
+  YAxis,
+  Cell
 } from "recharts";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -46,7 +48,8 @@ import {
   BoxIcon,
   Clock3,
   CreditCard,
-  HandCoins,
+  ArrowLeftRight,
+  Coins,
   KeyRound,
   LayoutDashboard,
   LucideIcon,
@@ -128,7 +131,7 @@ const PAYMENT_OPTIONS: PaymentOption[] = [
     id: "transfer",
     label: "Transferencia",
     description: "Pagos con comprobante electrónico o QR bancario.",
-    icon: HandCoins,
+    icon: ArrowLeftRight,
     accent: "cyan"
   },
   {
@@ -344,19 +347,19 @@ const CustomerDisplay = ({
               <ThemeIcon color="white" variant="light" radius="xl">
                 <TrendingUp size={18} />
               </ThemeIcon>
-              <Text weight={600}>2x $3.500 en bebidas seleccionadas</Text>
+              <Text fw={600}>2x $3.500 en bebidas seleccionadas</Text>
             </Group>
             <Group gap="sm">
               <ThemeIcon color="white" variant="light" radius="xl">
                 <BoxIcon size={18} />
               </ThemeIcon>
-              <Text weight={600}>15% de descuento en productos de limpieza</Text>
+              <Text fw={600}>15% de descuento en productos de limpieza</Text>
             </Group>
             <Group gap="sm">
               <ThemeIcon color="white" variant="light" radius="xl">
                 <Waypoints size={18} />
               </ThemeIcon>
-              <Text weight={600}>Panadería y lácteos frescos todos los días</Text>
+              <Text fw={600}>Panadería y lácteos frescos todos los días</Text>
             </Group>
           </Stack>
           <Badge size="lg" radius="xl" variant="light" color="white" maw={220}>
@@ -498,15 +501,17 @@ interface ShiftModalProps {
 const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary }: ShiftModalProps) => {
   const [seller, setSeller] = useState("");
   const [shiftType, setShiftType] = useState<ShiftType>("dia");
-  const [cashCounted, setCashCounted] = useState<number | null>(null);
+  const [cashCounted, setCashCounted] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!opened) {
       setSeller("");
       setShiftType("dia");
-      setCashCounted(null);
+      setCashCounted(undefined);
     }
   }, [opened]);
+
+  const countedValue = typeof cashCounted === "number" && Number.isFinite(cashCounted) ? cashCounted : undefined;
 
   return (
     <Modal opened={opened} onClose={onClose} title={mode === "open" ? "Apertura de turno" : "Cierre de turno"} centered size="lg">
@@ -577,8 +582,15 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
             <NumberInput
               label="Conteo final de efectivo"
               placeholder="Ej: 120000"
-              value={cashCounted}
-              onChange={(value) => setCashCounted(Number(value))}
+              value={cashCounted ?? undefined}
+              onChange={(value) => {
+                if (value === "" || value === null) {
+                  setCashCounted(undefined);
+                  return;
+                }
+                const parsed = typeof value === "number" ? value : Number(value);
+                setCashCounted(Number.isFinite(parsed) ? parsed : undefined);
+              }}
               min={0}
               thousandSeparator="."
             />
@@ -590,12 +602,8 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
                 </Group>
                 <Group justify="space-between">
                   <Text>Diferencia</Text>
-                  <Text fw={600} c={cashCounted !== null && Number.isFinite(cashCounted) && summary.cashExpected !== undefined && cashCounted - summary.cashExpected !== 0 ? (cashCounted - summary.cashExpected > 0 ? "teal" : "red") : undefined}>
-                    {formatCurrency(
-                      cashCounted !== null && Number.isFinite(cashCounted)
-                        ? cashCounted - summary.cashExpected
-                        : summary.cashExpected * -1
-                    )}
+                  <Text fw={600} c={countedValue !== undefined && countedValue - summary.cashExpected !== 0 ? (countedValue - summary.cashExpected > 0 ? "teal" : "red") : undefined}>
+                    {formatCurrency(countedValue !== undefined ? countedValue - summary.cashExpected : 0)}
                   </Text>
                 </Group>
               </Stack>
@@ -608,7 +616,7 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
                 color="teal"
                 leftSection={<RefreshCcw size={18} />}
                 onClick={() => {
-                  if (cashCounted === null || !Number.isFinite(cashCounted)) {
+                  if (countedValue === undefined) {
                     notifications.show({
                       title: "Campos incompletos",
                       message: "Ingresa el conteo final de efectivo para cerrar el turno.",
@@ -616,7 +624,7 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
                     });
                     return;
                   }
-                  onCloseShift({ cashCounted });
+                  onCloseShift({ cashCounted: countedValue });
                 }}
               >
                 Cerrar turno
@@ -796,12 +804,12 @@ interface FiadoPaymentModalProps {
 }
 
 const FiadoPaymentModal = ({ opened, client, mode, onClose, onSubmit }: FiadoPaymentModalProps) => {
-  const [amount, setAmount] = useState<number | null>(null);
+  const [amount, setAmount] = useState<number | undefined>(undefined);
   const [description, setDescription] = useState("");
 
   useEffect(() => {
     if (opened) {
-      setAmount(mode === "total" ? (client?.balance ?? 0) : null);
+      setAmount(mode === "total" ? client?.balance ?? 0 : undefined);
       setDescription("");
     }
   }, [opened, client, mode]);
@@ -819,8 +827,15 @@ const FiadoPaymentModal = ({ opened, client, mode, onClose, onSubmit }: FiadoPay
           label={mode === "total" ? "Monto a cancelar" : "Monto del abono"}
           min={0}
           max={maxAmount}
-          value={amount}
-          onChange={(value) => setAmount(Number(value))}
+          value={amount ?? undefined}
+          onChange={(value) => {
+            if (value === "" || value === null) {
+              setAmount(undefined);
+              return;
+            }
+            const parsed = typeof value === "number" ? value : Number(value);
+            setAmount(Number.isFinite(parsed) ? parsed : undefined);
+          }}
           thousandSeparator="."
         />
         {mode === "abono" && (
@@ -838,8 +853,7 @@ const FiadoPaymentModal = ({ opened, client, mode, onClose, onSubmit }: FiadoPay
           <Button
             leftSection={<PiggyBank size={18} />}
             onClick={() => {
-              const value = Number(amount);
-              if (!Number.isFinite(value) || value <= 0) {
+              if (amount === undefined || amount <= 0) {
                 notifications.show({
                   title: "Monto inválido",
                   message: "Ingresa un monto válido para registrar el movimiento.",
@@ -847,7 +861,7 @@ const FiadoPaymentModal = ({ opened, client, mode, onClose, onSubmit }: FiadoPay
                 });
                 return;
               }
-              if (value > client.balance) {
+              if (amount > client.balance) {
                 notifications.show({
                   title: "Excede el saldo",
                   message: "El monto supera el saldo actual del cliente.",
@@ -855,7 +869,7 @@ const FiadoPaymentModal = ({ opened, client, mode, onClose, onSubmit }: FiadoPay
                 });
                 return;
               }
-              onSubmit({ amount: value, description: description.trim() });
+              onSubmit({ amount, description: description.trim() });
             }}
           >
             Registrar
@@ -879,7 +893,7 @@ const App = () => {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>("cash");
-  const [cashReceived, setCashReceived] = useState<number | null>(null);
+  const [cashReceived, setCashReceived] = useState<number | undefined>(undefined);
   const [selectedFiadoClient, setSelectedFiadoClient] = useState<string | null>(null);
   const [customerDisplay, setCustomerDisplay] = useState(false);
 
@@ -948,10 +962,11 @@ const App = () => {
   const cartTotals = useMemo(() => {
     const total = cartDetailed.reduce((acc, item) => acc + item.subtotal, 0);
     const items = cartDetailed.reduce((acc, item) => acc + item.quantity, 0);
-    const change =
-      selectedPayment === "cash" && cashReceived !== null && Number.isFinite(cashReceived)
-        ? cashReceived - total
-        : 0;
+    const cashValue =
+      selectedPayment === "cash" && typeof cashReceived === "number" && Number.isFinite(cashReceived)
+        ? cashReceived
+        : undefined;
+    const change = cashValue !== undefined ? cashValue - total : 0;
     return { total, items, change };
   }, [cartDetailed, selectedPayment, cashReceived]);
 
@@ -971,6 +986,16 @@ const App = () => {
   const lowStockProducts = useMemo(() => products.filter((product) => product.stock <= product.minStock), [products]);
 
   const autoCompleteData = useMemo(() => products.map((product) => product.name), [products]);
+
+  const handleSelectPayment = (paymentId: PaymentMethod) => {
+    setSelectedPayment(paymentId);
+    if (paymentId !== "cash") {
+      setCashReceived(undefined);
+    }
+    if (paymentId !== "fiado") {
+      setSelectedFiadoClient(null);
+    }
+  };
 
   const handleAddProductToCart = (productId: string) => {
     const product = productMap.get(productId);
@@ -1036,7 +1061,8 @@ const App = () => {
       return false;
     }
     if (selectedPayment === "cash") {
-      if (cashReceived === null || !Number.isFinite(cashReceived) || cashReceived <= 0) {
+      const cashValue = typeof cashReceived === "number" && Number.isFinite(cashReceived) ? cashReceived : undefined;
+      if (cashValue === undefined || cashValue <= 0) {
         notifications.show({
           title: "Efectivo requerido",
           message: "Registra el monto recibido para controlar el cambio.",
@@ -1044,7 +1070,7 @@ const App = () => {
         });
         return false;
       }
-      if (cashReceived < cartTotals.total) {
+      if (cashValue < cartTotals.total) {
         notifications.show({
           title: "Efectivo insuficiente",
           message: "El monto recibido es inferior al total de la venta.",
@@ -1105,13 +1131,18 @@ const App = () => {
       quantity: item.quantity
     }));
 
+    const cashValue =
+      selectedPayment === "cash" && typeof cashReceived === "number" && Number.isFinite(cashReceived)
+        ? cashReceived
+        : null;
+
     const payload = {
       ticket,
       type: "sale",
       total: cartTotals.total,
       payment_method: selectedPayment,
-      cash_received: selectedPayment === "cash" ? cashReceived : null,
-      change_amount: selectedPayment === "cash" ? cartTotals.change : null,
+      cash_received: cashValue,
+      change_amount: cashValue !== null ? cartTotals.change : null,
       shift_id: activeShift?.id ?? null,
       seller: activeShift?.seller ?? "Mostrador",
       created_at: timestamp,
@@ -1164,7 +1195,7 @@ const App = () => {
     });
 
     setCart([]);
-    setCashReceived(null);
+    setCashReceived(undefined);
     setSelectedFiadoClient(null);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["products"] }),
@@ -1852,7 +1883,7 @@ const App = () => {
                                     radius="md"
                                     padding="md"
                                     style={{ cursor: "pointer" }}
-                                    onClick={() => setSelectedPayment(option.id)}
+                                    onClick={() => handleSelectPayment(option.id)}
                                     shadow={selectedPayment === option.id ? "sm" : "none"}
                                     bg={selectedPayment === option.id ? "var(--mantine-color-indigo-0)" : undefined}
                                   >
@@ -1890,8 +1921,15 @@ const App = () => {
                                 label="Efectivo recibido"
                                 placeholder="Monto entregado por el cliente"
                                 thousandSeparator="."
-                                value={cashReceived}
-                                onChange={(value) => setCashReceived(Number(value))}
+                                value={cashReceived ?? undefined}
+                                onChange={(value) => {
+                                  if (value === "" || value === null) {
+                                    setCashReceived(undefined);
+                                    return;
+                                  }
+                                  const parsed = typeof value === "number" ? value : Number(value);
+                                  setCashReceived(Number.isFinite(parsed) ? parsed : undefined);
+                                }}
                                 min={0}
                               />
                             )}
@@ -1905,7 +1943,7 @@ const App = () => {
                                   <Text>Total</Text>
                                   <Text fw={700}>{formatCurrency(cartTotals.total)}</Text>
                                 </Group>
-                                {selectedPayment === "cash" && cashReceived !== null && (
+                                {selectedPayment === "cash" && typeof cashReceived === "number" && Number.isFinite(cashReceived) && (
                                   <Group justify="space-between">
                                     <Text>Cambio</Text>
                                     <Text fw={600} c={cartTotals.change >= 0 ? "teal" : "red"}>
@@ -2190,12 +2228,16 @@ const ProductForm = ({ categories, onSubmit }: ProductFormProps) => {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [barcode, setBarcode] = useState("");
-  const [price, setPrice] = useState<number | null>(null);
-  const [stock, setStock] = useState<number | null>(null);
-  const [minStock, setMinStock] = useState<number | null>(5);
+  const [price, setPrice] = useState<number | undefined>(undefined);
+  const [stock, setStock] = useState<number | undefined>(undefined);
+  const [minStock, setMinStock] = useState<number | undefined>(5);
 
   const handleSubmit = () => {
-    if (!name.trim() || !category.trim() || !price || price <= 0) {
+    const trimmedName = name.trim();
+    const trimmedCategory = category.trim();
+    const priceValue = typeof price === "number" && Number.isFinite(price) ? price : undefined;
+
+    if (!trimmedName || !trimmedCategory || priceValue === undefined || priceValue <= 0) {
       notifications.show({
         title: "Datos incompletos",
         message: "Nombre, categoría y precio son obligatorios.",
@@ -2204,18 +2246,18 @@ const ProductForm = ({ categories, onSubmit }: ProductFormProps) => {
       return;
     }
     onSubmit({
-      name: name.trim(),
-      category: category.trim(),
+      name: trimmedName,
+      category: trimmedCategory,
       barcode: barcode.trim() || null,
-      price,
-      stock: stock ?? 0,
-      minStock: minStock ?? 5
+      price: priceValue,
+      stock: (typeof stock === "number" && Number.isFinite(stock) ? stock : undefined) ?? 0,
+      minStock: (typeof minStock === "number" && Number.isFinite(minStock) ? minStock : undefined) ?? 5
     });
     setName("");
     setCategory("");
     setBarcode("");
-    setPrice(null);
-    setStock(null);
+    setPrice(undefined);
+    setStock(undefined);
     setMinStock(5);
   };
 
@@ -2228,19 +2270,12 @@ const ProductForm = ({ categories, onSubmit }: ProductFormProps) => {
         value={name}
         onChange={(event) => setName(event.currentTarget.value)}
       />
-      <Select
+      <Autocomplete
         label="Categoría"
         placeholder="Selecciona o escribe"
-        searchable
-        data={categories.map((value) => ({ value, label: value }))}
-        creatable
-        getCreateLabel={(value) => `Crear categoría "${value}"`}
-        onCreate={(value) => {
-          setCategory(value);
-          return { value, label: value };
-        }}
+        data={categories}
         value={category}
-        onChange={(value) => setCategory(value ?? "")}
+        onChange={setCategory}
       />
       <TextInput
         label="Código de barras"
@@ -2252,21 +2287,42 @@ const ProductForm = ({ categories, onSubmit }: ProductFormProps) => {
         label="Precio"
         placeholder="CLP"
         thousandSeparator="."
-        value={price}
+        value={price ?? undefined}
         min={0}
-        onChange={(value) => setPrice(Number(value))}
+        onChange={(value) => {
+          if (value === "" || value === null) {
+            setPrice(undefined);
+            return;
+          }
+          const parsed = typeof value === "number" ? value : Number(value);
+          setPrice(Number.isFinite(parsed) ? parsed : undefined);
+        }}
       />
       <NumberInput
         label="Stock inicial"
-        value={stock}
+        value={stock ?? undefined}
         min={0}
-        onChange={(value) => setStock(Number(value))}
+        onChange={(value) => {
+          if (value === "" || value === null) {
+            setStock(undefined);
+            return;
+          }
+          const parsed = typeof value === "number" ? value : Number(value);
+          setStock(Number.isFinite(parsed) ? parsed : undefined);
+        }}
       />
       <NumberInput
         label="Stock mínimo"
-        value={minStock}
+        value={minStock ?? undefined}
         min={0}
-        onChange={(value) => setMinStock(Number(value))}
+        onChange={(value) => {
+          if (value === "" || value === null) {
+            setMinStock(undefined);
+            return;
+          }
+          const parsed = typeof value === "number" ? value : Number(value);
+          setMinStock(Number.isFinite(parsed) ? parsed : undefined);
+        }}
       />
       <Button leftSection={<BoxIcon size={18} />} onClick={handleSubmit}>
         Agregar producto
@@ -2357,7 +2413,7 @@ const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => (
                       <Button
                         size="xs"
                         variant="light"
-                        leftSection={<HandCoins size={16} />}
+                        leftSection={<Coins size={16} />}
                         onClick={() => onOpenModal(client.id, "abono")}
                         disabled={client.balance === 0}
                       >
