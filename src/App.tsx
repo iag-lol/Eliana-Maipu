@@ -89,21 +89,24 @@ import { formatCurrency, formatDate, formatDateTime, formatTime } from "./utils/
 dayjs.extend(relativeTime);
 dayjs.locale("es");
 
+const ADMIN_PASSWORD = "eliana152100";
+
 type TabId = "dashboard" | "pos" | "inventory" | "fiados" | "reports" | "shifts";
 
 interface TabConfig {
   id: TabId;
   label: string;
   icon: LucideIcon;
+  adminOnly?: boolean;
 }
 
 const TABS: TabConfig[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "pos", label: "Punto de venta", icon: ShoppingCart },
-  { id: "inventory", label: "Inventario", icon: BoxIcon },
-  { id: "fiados", label: "Clientes fiados", icon: UsersRound },
-  { id: "reports", label: "Reportes", icon: BarChart3 },
-  { id: "shifts", label: "Turnos", icon: Clock3 }
+  { id: "inventory", label: "Inventario", icon: BoxIcon, adminOnly: true },
+  { id: "fiados", label: "Clientes fiados", icon: UsersRound, adminOnly: true },
+  { id: "reports", label: "Reportes", icon: BarChart3, adminOnly: true },
+  { id: "shifts", label: "Turnos", icon: Clock3, adminOnly: true }
 ];
 
 interface PaymentOption {
@@ -171,6 +174,16 @@ const PAYMENT_COLORS: Record<PaymentMethod, string> = {
   fiado: "#f76707",
   staff: "#e64980"
 };
+
+const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  cash: "Efectivo",
+  card: "Tarjeta",
+  transfer: "Transferencia",
+  fiado: "Fiado",
+  staff: "Consumo del personal"
+};
+
+const PAYMENT_ORDER: PaymentMethod[] = ["cash", "card", "transfer", "fiado", "staff"];
 
 const mapProductRow = (row: any): Product => ({
   id: row.id,
@@ -425,6 +438,70 @@ const CustomerDisplay = ({
     </Grid.Col>
   </Grid>
 );
+
+interface PasswordModalProps {
+  opened: boolean;
+  onClose: () => void;
+  onUnlock: () => void;
+}
+
+const PasswordModal = ({ opened, onClose, onUnlock }: PasswordModalProps) => {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!opened) {
+      setPassword("");
+      setError(null);
+    }
+  }, [opened]);
+
+  const handleUnlock = () => {
+    if (password === ADMIN_PASSWORD) {
+      notifications.show({
+        title: "Acceso concedido",
+        message: "Secciones administrativas desbloqueadas.",
+        color: "teal"
+      });
+      onUnlock();
+      onClose();
+    } else {
+      setError("Contraseña incorrecta. Inténtalo nuevamente.");
+      notifications.show({
+        title: "Acceso denegado",
+        message: "La contraseña ingresada no es válida.",
+        color: "red"
+      });
+    }
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Acceso administrativo" centered>
+      <Stack>
+        <Text c="dimmed">
+          Ingresa la contraseña para administrar inventario, fiados, reportes y turnos.
+        </Text>
+        <TextInput
+          label="Contraseña"
+          placeholder="••••••"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.currentTarget.value)}
+          error={error ?? undefined}
+          autoFocus
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={handleUnlock} leftSection={<ShieldCheck size={18} />}>
+            Desbloquear
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+};
 
 interface ShiftModalProps {
   opened: boolean;
@@ -823,6 +900,9 @@ const App = () => {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
 
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [pendingTab, setPendingTab] = useState<TabId | null>(null);
+  const [passwordModalOpened, passwordModalHandlers] = useDisclosure(false);
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
@@ -852,6 +932,13 @@ const App = () => {
     const interval = window.setInterval(() => setNow(dayjs()), 60000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (adminUnlocked && pendingTab) {
+      setActiveTab(pendingTab);
+      setPendingTab(null);
+    }
+  }, [adminUnlocked, pendingTab]);
 
   const productQuery = useQuery({
     queryKey: ["products"],
@@ -926,6 +1013,27 @@ const App = () => {
   const lowStockProducts = useMemo(() => products.filter((product) => product.stock <= product.minStock), [products]);
 
   const autoCompleteData = useMemo(() => products.map((product) => product.name), [products]);
+
+  const guardTabChange = (tab: TabId) => {
+    const target = TABS.find((item) => item.id === tab);
+    if (target?.adminOnly && !adminUnlocked) {
+      setPendingTab(tab);
+      passwordModalHandlers.open();
+      return;
+    }
+    setActiveTab(tab);
+  };
+
+  const handleLockAdmin = () => {
+    setAdminUnlocked(false);
+    setPendingTab(null);
+    setActiveTab("pos");
+    notifications.show({
+      title: "Modo administrativo desactivado",
+      message: "Las secciones sensibles quedaron bloqueadas nuevamente.",
+      color: "blue"
+    });
+  };
 
   const handleSelectPayment = (paymentId: PaymentMethod) => {
     setSelectedPayment(paymentId);
@@ -1490,8 +1598,14 @@ const App = () => {
           boxShadow: "0 18px 45px rgba(15, 23, 42, 0.35)"
         }}
       >
-        <Group justify="space-between" align="center" h="100%" px="lg">
-          <Group gap="md">
+        <Group
+          justify="space-between"
+          align="flex-start"
+          h="100%"
+          px="lg"
+          style={{ flexWrap: "wrap", gap: "1.5rem" }}
+        >
+          <Group gap="md" align="center">
             <ThemeIcon
               size={48}
               radius="xl"
@@ -1509,7 +1623,7 @@ const App = () => {
               </Text>
             </Stack>
           </Group>
-          <Group gap="md" align="center">
+          <Group gap="md" align="center" style={{ flexWrap: "wrap", rowGap: "0.75rem" }}>
             <Stack gap={2} align="flex-end">
               <Group gap="xs">
                 <ThemeIcon size={30} radius="md" variant="white" color="blue">
@@ -1530,7 +1644,8 @@ const App = () => {
               style={{
                 background: "rgba(255, 255, 255, 0.16)",
                 border: "1px solid rgba(255,255,255,0.3)",
-                minWidth: 210
+                minWidth: 240,
+                flex: "0 0 auto"
               }}
             >
               <Stack gap={6}>
@@ -1563,106 +1678,199 @@ const App = () => {
                 )}
               </Stack>
             </Paper>
-            {activeShift ? (
-              <Button
-                size="sm"
-                variant="gradient"
-                gradient={{ from: "pink", to: "red", deg: 120 }}
-                leftSection={<RefreshCcw size={16} />}
-                onClick={() => {
-                  setShiftModalMode("close");
-                  shiftModalHandlers.open();
-                }}
-                style={{ fontWeight: 600 }}
+            <Group gap="sm" align="center">
+              {adminUnlocked ? (
+                <Button size="sm" variant="outline" color="yellow" onClick={handleLockAdmin}>
+                  Cerrar sesión
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  color="gray"
+                  onClick={() => {
+                    setPendingTab(activeTab);
+                    passwordModalHandlers.open();
+                  }}
+                >
+                  Admin
+                </Button>
+              )}
+              {activeShift ? (
+                <Button
+                  size="sm"
+                  variant="gradient"
+                  gradient={{ from: "pink", to: "red", deg: 120 }}
+                  leftSection={<RefreshCcw size={16} />}
+                  onClick={() => {
+                    setShiftModalMode("close");
+                    shiftModalHandlers.open();
+                  }}
+                  style={{ fontWeight: 600 }}
+                >
+                  Cerrar turno
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="gradient"
+                  gradient={{ from: "teal", to: "cyan", deg: 120 }}
+                  leftSection={<Clock3 size={16} />}
+                  onClick={() => {
+                    setShiftModalMode("open");
+                    shiftModalHandlers.open();
+                  }}
+                  style={{ fontWeight: 600 }}
+                >
+                  Abrir turno
+                </Button>
+              )}
+              <Tooltip
+                label={colorScheme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
               >
-                Cerrar turno
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="gradient"
-                gradient={{ from: "teal", to: "cyan", deg: 120 }}
-                leftSection={<Clock3 size={16} />}
-                onClick={() => {
-                  setShiftModalMode("open");
-                  shiftModalHandlers.open();
-                }}
-                style={{ fontWeight: 600 }}
-              >
-                Abrir turno
-              </Button>
-            )}
-            <Tooltip
-              label={colorScheme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-            >
-              <ActionIcon
-                variant="white"
-                size="lg"
-                radius="md"
-                onClick={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")}
-                style={{ background: "rgba(255,255,255,0.22)" }}
-              >
-                {colorScheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-              </ActionIcon>
-            </Tooltip>
-            <Tooltip label={customerDisplay ? "Cerrar vista cliente" : "Mostrar vista cliente"}>
-              <ActionIcon
-                variant="white"
-                size="lg"
-                radius="md"
-                onClick={() => setCustomerDisplay((prev) => !prev)}
-                style={{
-                  background: customerDisplay ? "rgba(248,113,113,0.35)" : "rgba(255,255,255,0.22)"
-                }}
-              >
-                <MonitorPlay size={18} />
-              </ActionIcon>
-            </Tooltip>
+                <ActionIcon
+                  variant="white"
+                  size="lg"
+                  radius="md"
+                  onClick={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")}
+                  style={{ background: "rgba(255,255,255,0.22)" }}
+                >
+                  {colorScheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label={customerDisplay ? "Cerrar vista cliente" : "Mostrar vista cliente"}>
+                <ActionIcon
+                  variant="white"
+                  size="lg"
+                  radius="md"
+                  onClick={() => setCustomerDisplay((prev) => !prev)}
+                  style={{
+                    background: customerDisplay ? "rgba(248,113,113,0.35)" : "rgba(255,255,255,0.22)"
+                  }}
+                >
+                  <MonitorPlay size={18} />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
           </Group>
         </Group>
       </AppShell.Header>
 
       <AppShell.Navbar p="md" className="sidebar-nav">
-        <Stack gap="xs">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            const lowStockCount = tab.id === "inventory" ? products.filter((p) => p.stock <= p.minStock).length : 0;
+        <Stack gap="md">
+          <Paper withBorder radius="lg" p="md">
+            {activeShift ? (
+              <Stack gap="sm">
+                <Group justify="space-between" align="flex-start">
+                  <Stack gap={2}>
+                    <Text fw={700}>Turno activo</Text>
+                    <Text size="xs" c="dimmed">
+                      {activeShift.seller} • desde {formatDateTime(activeShift.start)}
+                    </Text>
+                  </Stack>
+                  <Badge color="teal" variant="light">
+                    {activeShift.type === "dia" ? "Día" : "Noche"}
+                  </Badge>
+                </Group>
+                <Divider />
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Total ventas
+                  </Text>
+                  <Text fw={700}>{formatCurrency(shiftSummary.total)}</Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed">
+                    Tickets
+                  </Text>
+                  <Text fw={700}>{shiftSummary.tickets}</Text>
+                </Group>
+                {PAYMENT_ORDER.map((method) => (
+                  <Group key={method} justify="space-between">
+                    <Text size="xs" c="dimmed">
+                      {PAYMENT_LABELS[method].toUpperCase()}
+                    </Text>
+                    <Text fw={600}>{formatCurrency(shiftSummary.byPayment[method] ?? 0)}</Text>
+                  </Group>
+                ))}
+              </Stack>
+            ) : (
+              <Stack gap="xs">
+                <Text fw={700}>Sin turno activo</Text>
+                <Text size="sm" c="dimmed">
+                  Registra la apertura desde el encabezado para comenzar a mostrar indicadores.
+                </Text>
+              </Stack>
+            )}
+          </Paper>
 
-            return (
-              <div
-                key={tab.id}
-                className={`nav-item ${isActive ? "active" : ""}`}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <div className="nav-item-icon">
-                  <Icon size={22} />
-                </div>
-                <Text style={{ flex: 1 }}>{tab.label}</Text>
-                {lowStockCount > 0 && (
-                  <div className="nav-item-badge">
-                    {lowStockCount}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </Stack>
-        <Paper mt="auto" withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(15, 23, 42, 0.08), rgba(99, 102, 241, 0.12))" }}>
           <Stack gap="xs">
-            <Group gap="xs">
-              <ThemeIcon color="indigo" variant="light" size="md">
-                <TrendingUp size={18} />
-              </ThemeIcon>
-              <Text size="sm" fw={700} style={{ color: "#1f2937" }}>
-                Análisis en tiempo real
-              </Text>
-            </Group>
-            <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
-              Visualiza tus ventas, inventario crítico y desempeño por turno sin interrupciones.
-            </Text>
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              const disabled = tab.adminOnly && !adminUnlocked;
+              const lowStockCount = tab.id === "inventory" ? products.filter((p) => p.stock <= p.minStock).length : 0;
+
+              return (
+                <div
+                  key={tab.id}
+                  className={`nav-item ${isActive ? "active" : ""}`}
+                  onClick={() => guardTabChange(tab.id)}
+                  style={{ opacity: disabled ? 0.55 : 1 }}
+                >
+                  <div className="nav-item-icon">
+                    <Icon size={22} />
+                  </div>
+                  <Text style={{ flex: 1 }}>{tab.label}</Text>
+                  {lowStockCount > 0 && !disabled && (
+                    <div className="nav-item-badge">
+                      {lowStockCount}
+                    </div>
+                  )}
+                  {disabled && (
+                    <Badge size="xs" color="gray" variant="dot">
+                      Bloqueado
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
           </Stack>
-        </Paper>
+
+          <Paper withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(15, 23, 42, 0.08), rgba(99, 102, 241, 0.12))" }}>
+            <Stack gap="xs">
+              <Group gap="xs">
+                <ThemeIcon color="indigo" variant="light" size="md">
+                  <TrendingUp size={18} />
+                </ThemeIcon>
+                <Text size="sm" fw={700} style={{ color: "#1f2937" }}>
+                  Análisis en tiempo real
+                </Text>
+              </Group>
+              <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
+                Consulta métricas clave del turno y controla alertas de stock en un solo lugar.
+              </Text>
+            </Stack>
+          </Paper>
+
+          {adminUnlocked ? (
+            <Button variant="light" color="yellow" onClick={handleLockAdmin}>
+              Cerrar sesión administrativa
+            </Button>
+          ) : (
+            <Button
+              variant="gradient"
+              gradient={{ from: "indigo", to: "blue", deg: 90 }}
+              onClick={() => {
+                setPendingTab(activeTab);
+                passwordModalHandlers.open();
+              }}
+              leftSection={<ShieldCheck size={16} />}
+            >
+              Desbloquear secciones
+            </Button>
+          )}
+        </Stack>
       </AppShell.Navbar>
 
       <AppShell.Main>
@@ -2186,25 +2394,53 @@ const App = () => {
             zIndex: 20
           }}
         >
-          <Grid gutter="xs">
+          <Stack gap="sm">
+            <Grid gutter="xs">
             {TABS.map((tab) => {
               const Icon = tab.icon;
+              const disabled = tab.adminOnly && !adminUnlocked;
               return (
                 <Grid.Col key={tab.id} span={12 / TABS.length}>
                   <Button
                     variant={activeTab === tab.id ? "light" : "subtle"}
                     fullWidth
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => guardTabChange(tab.id)}
                     leftSection={<Icon size={18} />}
+                    style={{ opacity: disabled ? 0.6 : 1 }}
                   >
                     {tab.label}
                   </Button>
                 </Grid.Col>
               );
             })}
-          </Grid>
+            </Grid>
+            {adminUnlocked ? (
+              <Button size="sm" variant="light" color="yellow" onClick={handleLockAdmin}>
+                Cerrar sesión administrativa
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="gradient"
+                gradient={{ from: "indigo", to: "blue", deg: 90 }}
+                onClick={() => {
+                  setPendingTab(activeTab);
+                  passwordModalHandlers.open();
+                }}
+                leftSection={<ShieldCheck size={16} />}
+              >
+                Desbloquear secciones
+              </Button>
+            )}
+          </Stack>
         </Paper>
       )}
+
+      <PasswordModal
+        opened={passwordModalOpened}
+        onClose={passwordModalHandlers.close}
+        onUnlock={() => setAdminUnlocked(true)}
+      />
 
       <ShiftModal
         opened={shiftModalOpened}
