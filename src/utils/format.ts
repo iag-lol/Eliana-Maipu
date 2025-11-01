@@ -23,3 +23,11 @@ export const formatDate = (value: string | Date) => {
     year: "numeric"
   });
 };
+
+export const formatTime = (value: string | Date) => {
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleTimeString("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit" 
+  });
+};

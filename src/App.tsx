@@ -2829,9 +2829,15 @@ const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => {
     .sort((a, b) => b.balance - a.balance)
     .slice(0, 5);
 
-  const movementTimeline = clients
-    .flatMap((client) => client.history.map((item) => ({ ...item, client: client.name })))
-    .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf());
+  const movementTimeline =
+    clients
+      .flatMap((client) =>
+        (client.history ?? []).map((item) => ({
+          ...item,
+          client: client.name
+        }))
+      )
+      .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf());
 
   return (
     <Stack gap="xl">

@@ -24,6 +24,7 @@ export interface Client {
   balance: number;
   limit: number;
   updated_at?: string;
+  history?: ClientMovement[];
 }
 
 export interface ClientMovement {
