@@ -23,6 +23,7 @@ import {
   ThemeIcon,
   Title,
   Tooltip,
+  Progress,
   useMantineColorScheme
 } from "@mantine/core";
 import { Notifications, notifications } from "@mantine/notifications";
@@ -43,6 +44,7 @@ import {
 } from "recharts";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import "dayjs/locale/es";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -52,7 +54,6 @@ import {
   CreditCard,
   ArrowLeftRight,
   Coins,
-  KeyRound,
   LayoutDashboard,
   LucideIcon,
   MonitorPlay,
@@ -86,8 +87,7 @@ import { FALLBACK_CLIENTS, FALLBACK_PRODUCTS, FALLBACK_SALES, FALLBACK_SHIFTS } 
 import { formatCurrency, formatDate, formatDateTime } from "./utils/format";
 
 dayjs.extend(relativeTime);
-
-const ADMIN_PASSWORD = "eliana152100";
+dayjs.locale("es");
 
 type TabId = "dashboard" | "pos" | "inventory" | "fiados" | "reports" | "shifts";
 
@@ -95,16 +95,15 @@ interface TabConfig {
   id: TabId;
   label: string;
   icon: LucideIcon;
-  adminOnly?: boolean;
 }
 
 const TABS: TabConfig[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, adminOnly: true },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "pos", label: "Punto de venta", icon: ShoppingCart },
-  { id: "inventory", label: "Inventario", icon: BoxIcon, adminOnly: true },
-  { id: "fiados", label: "Clientes fiados", icon: UsersRound, adminOnly: true },
-  { id: "reports", label: "Reportes", icon: BarChart3, adminOnly: true },
-  { id: "shifts", label: "Turnos", icon: Clock3, adminOnly: true }
+  { id: "inventory", label: "Inventario", icon: BoxIcon },
+  { id: "fiados", label: "Clientes fiados", icon: UsersRound },
+  { id: "reports", label: "Reportes", icon: BarChart3 },
+  { id: "shifts", label: "Turnos", icon: Clock3 }
 ];
 
 interface PaymentOption {
@@ -426,71 +425,6 @@ const CustomerDisplay = ({
     </Grid.Col>
   </Grid>
 );
-
-interface PasswordModalProps {
-  opened: boolean;
-  onClose: () => void;
-  onUnlock: () => void;
-}
-
-const PasswordModal = ({ opened, onClose, onUnlock }: PasswordModalProps) => {
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!opened) {
-      setValue("");
-      setError(null);
-    }
-  }, [opened]);
-
-  const handleSubmit = () => {
-    if (value === ADMIN_PASSWORD) {
-      notifications.show({
-        title: "Acceso concedido",
-        message: "Funciones administrativas desbloqueadas.",
-        color: "teal",
-        icon: <ShieldCheck size={18} />
-      });
-      onUnlock();
-      onClose();
-      return;
-    }
-    setError("Contraseña incorrecta. Intenta nuevamente.");
-    notifications.show({
-      title: "Acceso denegado",
-      message: "La contraseña ingresada no es válida.",
-      color: "red",
-      icon: <KeyRound size={18} />
-    });
-  };
-
-  return (
-    <Modal opened={opened} onClose={onClose} title="Área administrativa" centered>
-      <Stack>
-        <Text c="dimmed">
-          Ingresa la contraseña para acceder a inventario, reportes, turnos y gestión de fiados.
-        </Text>
-        <TextInput
-          label="Contraseña"
-          placeholder="••••••"
-          type="password"
-          value={value}
-          onChange={(event) => setValue(event.currentTarget.value)}
-          error={error ?? undefined}
-        />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} leftSection={<ShieldCheck size={18} />}>
-            Desbloquear
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
-  );
-};
 
 interface ShiftModalProps {
   opened: boolean;
@@ -888,10 +822,7 @@ const App = () => {
   const isMobile = useMediaQuery("(max-width: 768px)");
   const { colorScheme, setColorScheme } = useMantineColorScheme();
 
-  const [activeTab, setActiveTab] = useState<TabId>("pos");
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [pendingTab, setPendingTab] = useState<TabId | null>(null);
-  const [passwordModalOpened, { open: openPasswordModal, close: closePasswordModal }] = useDisclosure(false);
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
@@ -915,6 +846,12 @@ const App = () => {
   const [fiadoModalMode, setFiadoModalMode] = useState<"abono" | "total">("abono");
 
   const [reportFilters, setReportFilters] = useState<ReportFilters>({ range: "today" });
+  const [now, setNow] = useState(dayjs());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(dayjs()), 60000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const productQuery = useQuery({
     queryKey: ["products"],
@@ -1450,23 +1387,6 @@ const App = () => {
     await queryClient.invalidateQueries({ queryKey: ["clients"] });
   };
 
-  const guardTabChange = (tab: TabId) => {
-    const target = TABS.find((item) => item.id === tab);
-    if (target?.adminOnly && !adminUnlocked) {
-      setPendingTab(tab);
-      openPasswordModal();
-      return;
-    }
-    setActiveTab(tab);
-  };
-
-  useEffect(() => {
-    if (adminUnlocked && pendingTab) {
-      setActiveTab(pendingTab);
-      setPendingTab(null);
-    }
-  }, [adminUnlocked, pendingTab]);
-
   const filteredSalesForReports = useMemo(() => {
     const now = dayjs();
     let start: dayjs.Dayjs | null = null;
@@ -1563,46 +1483,91 @@ const App = () => {
       }}
       padding="lg"
     >
-      <AppShell.Header className="header-professional">
-        <Group justify="space-between" h="100%" style={{ position: "relative", zIndex: 10 }}>
-          <Group gap="sm">
-            <div style={{
-              background: "rgba(255, 255, 255, 0.15)",
-              padding: "0.75rem",
-              borderRadius: "12px",
-              backdropFilter: "blur(10px)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
-            }}>
-              <LayoutDashboard size={28} color="white" strokeWidth={2.5} />
-            </div>
-            <Stack gap={0}>
-              <Text className="header-title">Negocio Eliana Maipú</Text>
-              <Text className="header-subtitle">
-                {dayjs().format("dddd, D [de] MMMM [de] YYYY")}
+      <AppShell.Header
+        style={{
+          background: "linear-gradient(110deg, #1e3a8a 0%, #312e81 40%, #0f172a 100%)",
+          borderBottom: "none",
+          boxShadow: "0 18px 45px rgba(15, 23, 42, 0.35)"
+        }}
+      >
+        <Group justify="space-between" align="center" h="100%" px="lg">
+          <Group gap="md">
+            <ThemeIcon
+              size={48}
+              radius="xl"
+              variant="gradient"
+              gradient={{ from: "blue.4", to: "cyan.4", deg: 120 }}
+            >
+              <LayoutDashboard size={26} />
+            </ThemeIcon>
+            <Stack gap={4} style={{ color: "white" }}>
+              <Text fw={700} fz={22}>
+                Negocio Eliana Maipú
+              </Text>
+              <Text fz="sm" style={{ color: "rgba(255,255,255,0.7)" }}>
+                Plataforma ejecutiva para control integral del negocio
               </Text>
             </Stack>
           </Group>
-          <Group gap="xs">
-            {activeShift && (
-              <div style={{
-                background: "rgba(255, 255, 255, 0.15)",
-                padding: "0.5rem 1rem",
-                borderRadius: "8px",
-                backdropFilter: "blur(10px)"
-              }}>
-                <Group gap="xs">
-                  <div className="status-indicator active" style={{ background: "#51cf66" }}></div>
-                  <Text style={{ color: "white", fontWeight: 700, fontSize: "0.875rem" }}>
-                    {activeShift.seller}
+          <Group gap="md" align="center">
+            <Stack gap={2} align="flex-end">
+              <Group gap="xs">
+                <ThemeIcon size={30} radius="md" variant="white" color="blue">
+                  <Clock3 size={18} color="#1e3a8a" />
+                </ThemeIcon>
+                <Text fw={600} c="white" style={{ textTransform: "capitalize" }}>
+                  {now.format("dddd, D [de] MMMM [de] YYYY")}
+                </Text>
+              </Group>
+              <Text fz="sm" style={{ color: "rgba(255,255,255,0.7)", letterSpacing: "0.04em" }}>
+                {now.format("HH:mm")} hrs
+              </Text>
+            </Stack>
+            <Paper
+              withBorder
+              radius="lg"
+              p="md"
+              style={{
+                background: "rgba(255, 255, 255, 0.16)",
+                border: "1px solid rgba(255,255,255,0.3)",
+                minWidth: 210
+              }}
+            >
+              <Stack gap={6}>
+                <Group justify="space-between" align="center">
+                  <Text fw={600} c="white" fz="sm">
+                    Estado del turno
                   </Text>
+                  <Badge
+                    size="sm"
+                    radius="sm"
+                    color={activeShift ? "teal" : "gray"}
+                    variant="light"
+                  >
+                    {activeShift ? "Activo" : "Sin turno"}
+                  </Badge>
                 </Group>
-              </div>
-            )}
+                {activeShift ? (
+                  <>
+                    <Text fz="sm" c="white">
+                      {activeShift.seller} • {activeShift.type === "dia" ? "Turno día" : "Turno noche"}
+                    </Text>
+                    <Text fz="xs" style={{ color: "rgba(255,255,255,0.75)" }}>
+                      Inicio: {formatDateTime(activeShift.start)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text fz="sm" style={{ color: "rgba(255,255,255,0.75)" }}>
+                    Aún no se registra apertura de caja.
+                  </Text>
+                )}
+              </Stack>
+            </Paper>
             {activeShift ? (
               <Button
-                variant="white"
-                color="blue"
                 size="sm"
+                variant="gradient"
+                gradient={{ from: "pink", to: "red", deg: 120 }}
                 leftSection={<RefreshCcw size={16} />}
                 onClick={() => {
                   setShiftModalMode("close");
@@ -1610,13 +1575,13 @@ const App = () => {
                 }}
                 style={{ fontWeight: 600 }}
               >
-                Cerrar
+                Cerrar turno
               </Button>
             ) : (
               <Button
-                variant="white"
-                color="blue"
                 size="sm"
+                variant="gradient"
+                gradient={{ from: "teal", to: "cyan", deg: 120 }}
                 leftSection={<Clock3 size={16} />}
                 onClick={() => {
                   setShiftModalMode("open");
@@ -1624,44 +1589,33 @@ const App = () => {
                 }}
                 style={{ fontWeight: 600 }}
               >
-                Abrir
+                Abrir turno
               </Button>
             )}
-            {adminUnlocked && (
-              <Tooltip label="Cerrar sesión administrativa">
-                <ActionIcon
-                  variant="white"
-                  color="red"
-                  size="lg"
-                  radius="md"
-                  onClick={() => {
-                    setAdminUnlocked(false);
-                    setActiveTab("pos");
-                    notifications.show({
-                      title: "Sesión cerrada",
-                      message: "Has cerrado la sesión administrativa",
-                      color: "blue"
-                    });
-                  }}
-                  style={{ background: "rgba(255, 255, 255, 0.15)", backdropFilter: "blur(10px)" }}
-                >
-                  <KeyRound size={18} color="white" />
-                </ActionIcon>
-              </Tooltip>
-            )}
-            <Tooltip label={customerDisplay ? "Cerrar vista cliente" : "Abrir vista cliente"}>
+            <Tooltip
+              label={colorScheme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+            >
               <ActionIcon
                 variant="white"
-                color="blue"
+                size="lg"
+                radius="md"
+                onClick={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")}
+                style={{ background: "rgba(255,255,255,0.22)" }}
+              >
+                {colorScheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label={customerDisplay ? "Cerrar vista cliente" : "Mostrar vista cliente"}>
+              <ActionIcon
+                variant="white"
                 size="lg"
                 radius="md"
                 onClick={() => setCustomerDisplay((prev) => !prev)}
                 style={{
-                  background: customerDisplay ? "rgba(239, 68, 68, 0.2)" : "rgba(255, 255, 255, 0.15)",
-                  backdropFilter: "blur(10px)"
+                  background: customerDisplay ? "rgba(248,113,113,0.35)" : "rgba(255,255,255,0.22)"
                 }}
               >
-                <MonitorPlay size={18} color="white" />
+                <MonitorPlay size={18} />
               </ActionIcon>
             </Tooltip>
           </Group>
@@ -1672,66 +1626,43 @@ const App = () => {
         <Stack gap="xs">
           {TABS.map((tab) => {
             const Icon = tab.icon;
-            const disabled = tab.adminOnly && !adminUnlocked;
             const isActive = activeTab === tab.id;
-            const hasLowStockAlert = tab.id === "inventory" && products.filter(p => p.stock <= p.minStock).length > 0;
+            const lowStockCount = tab.id === "inventory" ? products.filter((p) => p.stock <= p.minStock).length : 0;
 
             return (
               <div
                 key={tab.id}
                 className={`nav-item ${isActive ? "active" : ""}`}
-                onClick={() => !disabled && guardTabChange(tab.id)}
-                style={{
-                  opacity: disabled ? 0.5 : 1,
-                  cursor: disabled ? "not-allowed" : "pointer"
-                }}
+                onClick={() => setActiveTab(tab.id)}
               >
                 <div className="nav-item-icon">
                   <Icon size={22} />
                 </div>
                 <Text style={{ flex: 1 }}>{tab.label}</Text>
-                {hasLowStockAlert && !disabled && (
+                {lowStockCount > 0 && (
                   <div className="nav-item-badge">
-                    {products.filter(p => p.stock <= p.minStock).length}
+                    {lowStockCount}
                   </div>
-                )}
-                {disabled && (
-                  <Badge size="xs" color="gray" variant="dot">Bloqueado</Badge>
                 )}
               </div>
             );
           })}
         </Stack>
-        {!adminUnlocked && (
-          <Paper mt="auto" withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, #f8f9fa, white)", border: "2px solid #e9ecef" }}>
-            <Stack gap="sm">
-              <Group gap="xs">
-                <ThemeIcon color="indigo" variant="light" size="md">
-                  <ShieldCheck size={18} />
-                </ThemeIcon>
-                <Text size="sm" fw={700} style={{ color: "#495057" }}>
-                  Área restringida
-                </Text>
-              </Group>
-              <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
-                Las secciones administrativas requieren autenticación para acceder.
+        <Paper mt="auto" withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(15, 23, 42, 0.08), rgba(99, 102, 241, 0.12))" }}>
+          <Stack gap="xs">
+            <Group gap="xs">
+              <ThemeIcon color="indigo" variant="light" size="md">
+                <TrendingUp size={18} />
+              </ThemeIcon>
+              <Text size="sm" fw={700} style={{ color: "#1f2937" }}>
+                Análisis en tiempo real
               </Text>
-              <Button
-                fullWidth
-                variant="gradient"
-                gradient={{ from: "indigo", to: "blue", deg: 90 }}
-                leftSection={<KeyRound size={18} />}
-                onClick={() => {
-                  setPendingTab(activeTab);
-                  openPasswordModal();
-                }}
-                style={{ fontWeight: 600, boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
-              >
-                Desbloquear acceso
-              </Button>
-            </Stack>
-          </Paper>
-        )}
+            </Group>
+            <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
+              Visualiza tus ventas, inventario crítico y desempeño por turno sin interrupciones.
+            </Text>
+          </Stack>
+        </Paper>
       </AppShell.Navbar>
 
       <AppShell.Main>
@@ -1752,10 +1683,82 @@ const App = () => {
                 clients={clients}
                 activeShift={activeShift}
                 shiftSummary={shiftSummary}
+                onEditSale={(saleId) => setPaymentEditSaleId(saleId)}
               />
             )}
             {activeTab === "pos" && (
               <Stack gap="xl">
+                <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+                  <Paper withBorder radius="lg" p="md" style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(147,197,253,0.18))" }}>
+                    <Stack gap={4}>
+                      <Group justify="space-between">
+                        <Group gap="xs">
+                          <ThemeIcon variant="gradient" gradient={{ from: "blue", to: "cyan" }} radius="md">
+                            <TrendingUp size={18} />
+                          </ThemeIcon>
+                          <Text size="sm" c="dimmed">
+                            Ventas del turno
+                          </Text>
+                        </Group>
+                        <Badge size="sm" color="blue" variant="light">
+                          {activeShift ? "En curso" : "General"}
+                        </Badge>
+                      </Group>
+                      <Text fw={700} fz="xl">
+                        {formatCurrency(shiftSummary.total)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {shiftSummary.tickets} tickets registrados ({formatCurrency(shiftSummary.byPayment.cash ?? 0)} en efectivo)
+                      </Text>
+                    </Stack>
+                  </Paper>
+                  <Paper withBorder radius="lg" p="md" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(45,212,191,0.18))" }}>
+                    <Stack gap={4}>
+                      <Group gap="xs">
+                        <ThemeIcon variant="gradient" gradient={{ from: "teal", to: "green" }} radius="md">
+                          <ShoppingCart size={18} />
+                        </ThemeIcon>
+                        <Text size="sm" c="dimmed">
+                          Carrito actual
+                        </Text>
+                      </Group>
+                      <Group justify="space-between" align="flex-end">
+                        <Text fw={700} fz="xl">
+                          {formatCurrency(cartTotals.total)}
+                        </Text>
+                        <Badge size="sm" color="teal" variant="light">
+                          {cartTotals.items} productos
+                        </Badge>
+                      </Group>
+                      <Text size="xs" c="dimmed">
+                        Selecciona el método de pago y confirma para generar el ticket.
+                      </Text>
+                    </Stack>
+                  </Paper>
+                  <Paper withBorder radius="lg" p="md" style={{ background: "linear-gradient(135deg, rgba(251,191,36,0.14), rgba(251,146,60,0.18))" }}>
+                    <Stack gap={4}>
+                      <Group gap="xs">
+                        <ThemeIcon variant="gradient" gradient={{ from: "orange", to: "yellow" }} radius="md">
+                          <AlertTriangle size={18} />
+                        </ThemeIcon>
+                        <Text size="sm" c="dimmed">
+                          Stock crítico
+                        </Text>
+                      </Group>
+                      <Group justify="space-between" align="center">
+                        <Text fw={700} fz="xl">
+                          {lowStockProducts.length}
+                        </Text>
+                        <Badge color="orange" variant="light" size="sm">
+                          {lowStockProducts.length > 0 ? "Atención urgente" : "Todo en orden"}
+                        </Badge>
+                      </Group>
+                      <Text size="xs" c="dimmed">
+                        Revisa inventario para reponer productos bajo el mínimo.
+                      </Text>
+                    </Stack>
+                  </Paper>
+                </SimpleGrid>
                 <Grid gutter="xl">
                   <Grid.Col span={{ base: 12, xl: 7 }}>
                     <Stack gap="md">
@@ -1795,40 +1798,63 @@ const App = () => {
                           />
                           <ScrollArea h={isMobile ? 400 : 520}>
                             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                              {filteredProducts.map((product) => (
-                                <Card
-                                  key={product.id}
-                                  withBorder
-                                  shadow="sm"
-                                  radius="lg"
-                                  onClick={() => handleAddProductToCart(product.id)}
-                                  style={{ cursor: "pointer" }}
-                                >
-                                  <Stack gap="xs">
-                                    <Group justify="space-between" align="flex-start">
-                                      <Stack gap={4}>
-                                        <Text fw={600}>{product.name}</Text>
-                                        <Text size="sm" c="dimmed">
-                                          {product.category}
-                                        </Text>
-                                      </Stack>
-                                      <Badge color="indigo" variant="light">
-                                        {formatCurrency(product.price)}
-                                      </Badge>
-                                    </Group>
-                                    <Group justify="space-between">
-                                      <Text size="sm" c="dimmed">
-                                        Stock: {product.stock}
-                                      </Text>
-                                      {product.stock <= product.minStock && (
-                                        <Badge color="orange" variant="light">
-                                          Bajo stock
+                              {filteredProducts.map((product) => {
+                                const stockRatio = Math.min(
+                                  100,
+                                  Math.round((product.stock / Math.max(product.minStock || 1, 1)) * 100)
+                                );
+                                return (
+                                  <Card
+                                    key={product.id}
+                                    withBorder
+                                    shadow="sm"
+                                    radius="lg"
+                                    onClick={() => handleAddProductToCart(product.id)}
+                                    style={{ cursor: "pointer" }}
+                                  >
+                                    <Stack gap="xs">
+                                      <Group justify="space-between" align="flex-start">
+                                        <Stack gap={4}>
+                                          <Text fw={600}>{product.name}</Text>
+                                          <Text size="sm" c="dimmed">
+                                            {product.category}
+                                          </Text>
+                                        </Stack>
+                                        <Badge color="indigo" variant="light">
+                                          {formatCurrency(product.price)}
                                         </Badge>
-                                      )}
-                                    </Group>
-                                  </Stack>
-                                </Card>
-                              ))}
+                                      </Group>
+                                      <Group justify="space-between">
+                                        <Text size="sm" c="dimmed">
+                                          Stock actual: {product.stock}
+                                        </Text>
+                                        <Text size="sm" c="dimmed">
+                                          Mínimo: {product.minStock}
+                                        </Text>
+                                      </Group>
+                                      <Progress
+                                        value={stockRatio}
+                                        color={stockRatio < 50 ? "orange" : "teal"}
+                                        radius="xl"
+                                      />
+                                      <Group justify="space-between">
+                                        <Text size="xs" c="dimmed">
+                                          {product.barcode ? `SKU: ${product.barcode}` : "Sin código asignado"}
+                                        </Text>
+                                        {product.stock <= product.minStock ? (
+                                          <Badge color="orange" variant="light" size="sm">
+                                            Bajo stock
+                                          </Badge>
+                                        ) : (
+                                          <Badge color="teal" variant="light" size="sm">
+                                            Disponible
+                                          </Badge>
+                                        )}
+                                      </Group>
+                                    </Stack>
+                                  </Card>
+                                );
+                              })}
                             </SimpleGrid>
                           </ScrollArea>
                         </Stack>
@@ -1896,60 +1922,74 @@ const App = () => {
                               </Tooltip>
                             </Group>
                           </Group>
-                          <Stack gap="sm" h={360} style={{ overflow: "auto" }}>
-                            {cartDetailed.length === 0 ? (
-                              <Paper withBorder p="xl" radius="md">
-                                <Text c="dimmed" ta="center">
-                                  Agrega productos para iniciar la venta.
-                                </Text>
-                              </Paper>
-                            ) : (
-                              cartDetailed.map((item) => (
-                                <Card key={item.product.id} withBorder radius="md" padding="md">
-                                  <Stack gap="xs">
-                                    <Group justify="space-between" align="flex-start">
-                                      <Stack gap={2}>
-                                        <Text fw={600}>{item.product.name}</Text>
-                                        <Text size="sm" c="dimmed">
-                                          {formatCurrency(item.product.price)} c/u
-                                        </Text>
-                                      </Stack>
-                                      <Badge color="indigo" variant="light">
-                                        {formatCurrency(item.subtotal)}
-                                      </Badge>
-                                    </Group>
-                                    <Group justify="space-between">
-                                      <Group gap="xs">
-                                        <ActionIcon
-                                          size="sm"
+                          {cartDetailed.length === 0 ? (
+                            <Paper withBorder p="xl" radius="md">
+                              <Text c="dimmed" ta="center">
+                                Agrega productos para iniciar la venta.
+                              </Text>
+                            </Paper>
+                          ) : (
+                            <ScrollArea h={320}>
+                              <Table highlightOnHover>
+                                <Table.Thead>
+                                  <Table.Tr>
+                                    <Table.Th>Producto</Table.Th>
+                                    <Table.Th>Precio</Table.Th>
+                                    <Table.Th>Cantidad</Table.Th>
+                                    <Table.Th>Subtotal</Table.Th>
+                                    <Table.Th style={{ width: 120 }}>Acciones</Table.Th>
+                                  </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                  {cartDetailed.map((item) => (
+                                    <Table.Tr key={item.product.id}>
+                                      <Table.Td>
+                                        <Stack gap={2}>
+                                          <Text fw={600}>{item.product.name}</Text>
+                                          <Text size="xs" c="dimmed">
+                                            {item.product.barcode || "Sin código asignado"}
+                                          </Text>
+                                        </Stack>
+                                      </Table.Td>
+                                      <Table.Td>{formatCurrency(item.product.price)}</Table.Td>
+                                      <Table.Td>
+                                        <Group gap="xs">
+                                          <ActionIcon
+                                            size="sm"
+                                            variant="light"
+                                            onClick={() => handleUpdateCartQuantity(item.product.id, item.quantity - 1)}
+                                          >
+                                            <Text fw={700}>-</Text>
+                                          </ActionIcon>
+                                          <Text fw={600}>{item.quantity}</Text>
+                                          <ActionIcon
+                                            size="sm"
+                                            variant="light"
+                                            onClick={() => handleUpdateCartQuantity(item.product.id, item.quantity + 1)}
+                                          >
+                                            <Text fw={700}>+</Text>
+                                          </ActionIcon>
+                                        </Group>
+                                      </Table.Td>
+                                      <Table.Td>
+                                        <Text fw={600}>{formatCurrency(item.subtotal)}</Text>
+                                      </Table.Td>
+                                      <Table.Td>
+                                        <Button
                                           variant="light"
-                                          onClick={() => handleUpdateCartQuantity(item.product.id, item.quantity - 1)}
+                                          color="red"
+                                          size="xs"
+                                          onClick={() => handleRemoveCartItem(item.product.id)}
                                         >
-                                          <span>-</span>
-                                        </ActionIcon>
-                                        <Text fw={600}>{item.quantity}</Text>
-                                        <ActionIcon
-                                          size="sm"
-                                          variant="light"
-                                          onClick={() => handleUpdateCartQuantity(item.product.id, item.quantity + 1)}
-                                        >
-                                          <span>+</span>
-                                        </ActionIcon>
-                                      </Group>
-                                      <Button
-                                        variant="light"
-                                        color="red"
-                                        onClick={() => handleRemoveCartItem(item.product.id)}
-                                        size="xs"
-                                      >
-                                        Quitar
-                                      </Button>
-                                    </Group>
-                                  </Stack>
-                                </Card>
-                              ))
-                            )}
-                          </Stack>
+                                          Quitar
+                                        </Button>
+                                      </Table.Td>
+                                    </Table.Tr>
+                                  ))}
+                                </Table.Tbody>
+                              </Table>
+                            </ScrollArea>
+                          )}
                           <Divider />
                           <Stack gap="md">
                             <Stack gap="xs">
@@ -2083,59 +2123,6 @@ const App = () => {
                     </Stack>
                   </Grid.Col>
                 </Grid>
-                <Card withBorder radius="lg">
-                  <Stack gap="md">
-                    <Group justify="space-between">
-                      <Title order={4}>Historial reciente</Title>
-                      <Badge variant="light" color="indigo">
-                        {sales.length} movimientos
-                      </Badge>
-                    </Group>
-                    <ScrollArea h={260}>
-                      <Table highlightOnHover striped>
-                        <Table.Thead>
-                          <Table.Tr>
-                            <Table.Th>Ticket</Table.Th>
-                            <Table.Th>Fecha</Table.Th>
-                            <Table.Th>Tipo</Table.Th>
-                            <Table.Th>Método</Table.Th>
-                            <Table.Th>Total</Table.Th>
-                            <Table.Th>Acciones</Table.Th>
-                          </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                          {sales.slice(0, 12).map((sale) => (
-                            <Table.Tr key={sale.id}>
-                              <Table.Td>#{sale.ticket}</Table.Td>
-                              <Table.Td>{formatDateTime(sale.created_at)}</Table.Td>
-                              <Table.Td>
-                                <Badge color={sale.type === "sale" ? "teal" : "red"} variant="light">
-                                  {sale.type === "sale" ? "Venta" : "Devolución"}
-                                </Badge>
-                              </Table.Td>
-                              <Table.Td>
-                                {PAYMENT_OPTIONS.find((option) => option.id === sale.paymentMethod)?.label ??
-                                  sale.paymentMethod.toUpperCase()}
-                              </Table.Td>
-                              <Table.Td>{formatCurrency(sale.total)}</Table.Td>
-                              <Table.Td>
-                                {sale.type === "sale" && (
-                                  <Button
-                                    variant="subtle"
-                                    size="xs"
-                                    onClick={() => setPaymentEditSaleId(sale.id)}
-                                  >
-                                    Cambiar método
-                                  </Button>
-                                )}
-                              </Table.Td>
-                            </Table.Tr>
-                          ))}
-                        </Table.Tbody>
-                      </Table>
-                    </ScrollArea>
-                  </Stack>
-                </Card>
               </Stack>
             )}
             {activeTab === "inventory" && (
@@ -2202,15 +2189,13 @@ const App = () => {
           <Grid gutter="xs">
             {TABS.map((tab) => {
               const Icon = tab.icon;
-              const disabled = tab.adminOnly && !adminUnlocked;
               return (
                 <Grid.Col key={tab.id} span={12 / TABS.length}>
                   <Button
                     variant={activeTab === tab.id ? "light" : "subtle"}
                     fullWidth
-                    onClick={() => guardTabChange(tab.id)}
+                    onClick={() => setActiveTab(tab.id)}
                     leftSection={<Icon size={18} />}
-                    disabled={disabled}
                   >
                     {tab.label}
                   </Button>
@@ -2220,12 +2205,6 @@ const App = () => {
           </Grid>
         </Paper>
       )}
-
-      <PasswordModal
-        opened={passwordModalOpened}
-        onClose={closePasswordModal}
-        onUnlock={() => setAdminUnlocked(true)}
-      />
 
       <ShiftModal
         opened={shiftModalOpened}
@@ -2418,19 +2397,35 @@ const InventoryTable = ({ products }: { products: Product[] }) => (
               <Table.Th>Categoría</Table.Th>
               <Table.Th>Stock</Table.Th>
               <Table.Th>Mínimo</Table.Th>
+              <Table.Th>Cobertura</Table.Th>
               <Table.Th>Precio</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {products.map((product) => (
-              <Table.Tr key={product.id}>
-                <Table.Td>{product.name}</Table.Td>
-                <Table.Td>{product.category}</Table.Td>
-                <Table.Td>{product.stock}</Table.Td>
-                <Table.Td>{product.minStock}</Table.Td>
-                <Table.Td>{formatCurrency(product.price)}</Table.Td>
-              </Table.Tr>
-            ))}
+            {products.map((product) => {
+              const coverage = Math.min(
+                100,
+                Math.round((product.stock / Math.max(product.minStock || 1, 1)) * 100)
+              );
+              const statusColor = product.stock <= product.minStock ? "orange" : "teal";
+              return (
+                <Table.Tr key={product.id}>
+                  <Table.Td>{product.name}</Table.Td>
+                  <Table.Td>{product.category}</Table.Td>
+                  <Table.Td>{product.stock}</Table.Td>
+                  <Table.Td>{product.minStock}</Table.Td>
+                  <Table.Td>
+                    <Stack gap={4}>
+                      <Progress value={coverage} color={statusColor} radius="xl" />
+                      <Text size="xs" c="dimmed">
+                        {coverage}% cobertura
+                      </Text>
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td>{formatCurrency(product.price)}</Table.Td>
+                </Table.Tr>
+              );
+            })}
           </Table.Tbody>
         </Table>
       </ScrollArea>
@@ -2444,215 +2439,378 @@ interface DashboardViewProps {
   clients: Client[];
   activeShift: Shift | undefined;
   shiftSummary: ShiftSummary;
+  onEditSale: (saleId: string) => void;
 }
 
-const DashboardView = ({ products, sales, clients, activeShift, shiftSummary }: DashboardViewProps) => {
-  const today = dayjs().startOf("day");
-  const todaySales = sales.filter((sale) => dayjs(sale.created_at).isAfter(today));
-  const todayRevenue = todaySales.reduce((acc, sale) => acc + sale.total, 0);
-  const todayTickets = todaySales.length;
+const DashboardView = ({
+  products,
+  sales,
+  clients,
+  activeShift,
+  shiftSummary,
+  onEditSale
+}: DashboardViewProps) => {
+  const shiftSales = useMemo(() => {
+    if (!activeShift) return [];
+    return sales
+      .filter((sale) => sale.shiftId === activeShift.id)
+      .sort((a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf());
+  }, [sales, activeShift]);
 
-  const lowStockProducts = products.filter((product) => product.stock <= product.minStock);
-  const outOfStockProducts = products.filter((product) => product.stock === 0);
+  if (!activeShift) {
+    const lowStockProducts = products.filter((product) => product.stock <= product.minStock).slice(0, 6);
+    return (
+      <Stack gap="lg">
+        <Card withBorder radius="lg">
+          <Stack gap="sm">
+            <Title order={3}>Panel ejecutivo</Title>
+            <Text c="dimmed">
+              Aún no se registra un turno activo. Abre un turno desde la parte superior para comenzar a monitorear las ventas en tiempo real.
+            </Text>
+          </Stack>
+        </Card>
+        {lowStockProducts.length > 0 && (
+          <Card withBorder radius="lg">
+            <Stack gap="md">
+              <Group justify="space-between">
+                <Group gap="xs">
+                  <AlertTriangle size={18} />
+                  <Text fw={700}>Productos críticos</Text>
+                </Group>
+                <Badge color="orange" variant="light">
+                  {lowStockProducts.length}
+                </Badge>
+              </Group>
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+                {lowStockProducts.map((product) => (
+                  <Paper key={product.id} withBorder p="sm" radius="md">
+                    <Stack gap={4}>
+                      <Text fw={600} size="sm">{product.name}</Text>
+                      <Text size="xs" c="dimmed">
+                        Stock {product.stock} / Mínimo {product.minStock}
+                      </Text>
+                    </Stack>
+                  </Paper>
+                ))}
+              </SimpleGrid>
+            </Stack>
+          </Card>
+        )}
+      </Stack>
+    );
+  }
 
-  const authorizedClientsCount = clients.filter((client) => client.authorized).length;
-  const totalDebt = clients.reduce((acc, client) => acc + client.balance, 0);
+  const salesOnly = shiftSales.filter((sale) => sale.type === "sale");
+  const returns = shiftSales.filter((sale) => sale.type === "return");
+  const returnsTotal = returns.reduce((acc, sale) => acc + sale.total, 0);
+  const fiadoTotal = salesOnly
+    .filter((sale) => sale.paymentMethod === "fiado")
+    .reduce((acc, sale) => acc + sale.total, 0);
+  const staffTotal = salesOnly
+    .filter((sale) => sale.paymentMethod === "staff")
+    .reduce((acc, sale) => acc + sale.total, 0);
 
-  const weekAgo = dayjs().subtract(7, "day");
-  const lastWeekSales = sales.filter((sale) =>
-    dayjs(sale.created_at).isAfter(weekAgo) && dayjs(sale.created_at).isBefore(today)
-  );
-  const lastWeekRevenue = lastWeekSales.reduce((acc, sale) => acc + sale.total, 0);
-  const revenueChange = lastWeekRevenue > 0 ? ((todayRevenue - lastWeekRevenue) / lastWeekRevenue * 100) : 0;
+  const paymentData = Object.entries(shiftSummary.byPayment)
+    .filter(([, value]) => value > 0)
+    .map(([method, value]) => {
+      const option = PAYMENT_OPTIONS.find((opt) => opt.id === method)!;
+      return {
+        name: option.label,
+        value,
+        method: method as PaymentMethod,
+        color: PAYMENT_COLORS[method as PaymentMethod]
+      };
+    });
 
   const topProducts = useMemo(() => {
     const productSales = new Map<string, { name: string; quantity: number; revenue: number }>();
-
-    todaySales.forEach((sale) => {
+    salesOnly.forEach((sale) => {
       sale.items.forEach((item) => {
         const existing = productSales.get(item.productId) || { name: item.name, quantity: 0, revenue: 0 };
         productSales.set(item.productId, {
           name: item.name,
           quantity: existing.quantity + item.quantity,
-          revenue: existing.revenue + (item.price * item.quantity)
+          revenue: existing.revenue + item.price * item.quantity
         });
       });
     });
-
     return Array.from(productSales.values())
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5);
-  }, [todaySales]);
+  }, [salesOnly]);
 
-  const paymentMethodStats = useMemo(() => {
-    const stats = new Map<PaymentMethod, number>();
-    todaySales.forEach((sale) => {
-      const current = stats.get(sale.paymentMethod) || 0;
-      stats.set(sale.paymentMethod, current + sale.total);
-    });
-    return stats;
-  }, [todaySales]);
+  const lowStockSnapshot = products
+    .filter((product) => product.stock <= product.minStock)
+    .sort((a, b) => a.stock - b.stock)
+    .slice(0, 5);
+
+  const clientsWithDebt = clients
+    .filter((client) => client.balance > 0)
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 5);
+
+  const latestOperations = shiftSales.slice(0, 8);
 
   return (
-    <div className="app-container">
-      <Stack gap="md">
-        {/* Header compacto */}
-        <Group justify="space-between" wrap="nowrap">
-          <div>
-            <Title order={3} style={{ fontSize: "1.5rem", fontWeight: 700, color: "#212529", marginBottom: "0.25rem" }}>
-              Dashboard
-            </Title>
-            <Text c="dimmed" size="xs">
-              {dayjs().format("dddd, D [de] MMMM")}
+    <Stack gap="lg">
+      <Card withBorder radius="lg" style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.18))" }}>
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={4}>
+            <Text fw={700} fz="lg">
+              Turno activo • {activeShift.seller}
             </Text>
-          </div>
-          {activeShift && (
-            <Badge size="md" variant="gradient" gradient={{ from: "teal", to: "lime", deg: 90 }}>
-              ● {activeShift.seller}
-            </Badge>
-          )}
+            <Text size="sm" c="dimmed">
+              {activeShift.type === "dia" ? "Turno diurno" : "Turno nocturno"} • Apertura {formatDateTime(activeShift.start)}
+            </Text>
+          </Stack>
+          <Badge color="blue" variant="light">
+            {shiftSales.length} movimientos
+          </Badge>
         </Group>
+      </Card>
 
-        {/* Métricas principales - más compactas */}
-        <SimpleGrid cols={{ base: 2, sm: 2, lg: 4 }} spacing="sm">
-          <div className="stat-card">
-            <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #12b886, #0ca678)" }}>
-              <Coins size={22} color="white" />
-            </div>
-            <div className="stat-card-value">{formatCurrency(todayRevenue)}</div>
-            <div className="stat-card-label">Ventas hoy</div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #4263eb, #3b5bdb)" }}>
-              <Receipt size={22} color="white" />
-            </div>
-            <div className="stat-card-value">{todayTickets}</div>
-            <div className="stat-card-label">Tickets</div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #f76707, #e8590c)" }}>
-              <UsersRound size={22} color="white" />
-            </div>
-            <div className="stat-card-value">{authorizedClientsCount}</div>
-            <div className="stat-card-label">Clientes</div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #fa5252, #e03131)" }}>
-              <TrendingUp size={22} color="white" />
-            </div>
-            <div className="stat-card-value">{lowStockProducts.length}</div>
-            <div className="stat-card-label">Alertas</div>
-          </div>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+        <Paper withBorder radius="lg" p="md">
+          <Stack gap={4}>
+            <Text size="sm" c="dimmed">
+              Total recaudado
+            </Text>
+            <Text fw={700} fz="xl">
+              {formatCurrency(shiftSummary.total)}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Incluye devoluciones: {formatCurrency(returnsTotal)}
+            </Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder radius="lg" p="md">
+          <Stack gap={4}>
+            <Text size="sm" c="dimmed">
+              Tickets emitidos
+            </Text>
+            <Text fw={700} fz="xl">
+              {salesOnly.length}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Devoluciones registradas: {returns.length}
+            </Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder radius="lg" p="md">
+          <Stack gap={4}>
+            <Text size="sm" c="dimmed">
+              Fiado del turno
+            </Text>
+            <Text fw={700} fz="xl">
+              {formatCurrency(fiadoTotal)}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Controla los abonos desde la sección de fiados
+            </Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder radius="lg" p="md">
+          <Stack gap={4}>
+            <Text size="sm" c="dimmed">
+              Consumo interno
+            </Text>
+            <Text fw={700} fz="xl">
+              {formatCurrency(staffTotal)}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Ventas registradas como consumo del personal
+            </Text>
+          </Stack>
+        </Paper>
       </SimpleGrid>
 
-        {/* Alertas compactas */}
-        {(lowStockProducts.length > 0 || !activeShift) && (
-          <Group gap="xs">
-            {!activeShift && (
-              <div className="alert-professional alert-warning" style={{ flex: 1, padding: "0.75rem" }}>
-                <Group gap="xs">
-                  <AlertTriangle size={16} />
-                  <Text fw={600} size="sm">No hay turno activo</Text>
-                </Group>
-              </div>
-            )}
-            {lowStockProducts.length > 0 && (
-              <div className="alert-professional alert-warning" style={{ flex: 1, padding: "0.75rem" }}>
-                <Group gap="xs">
-                  <AlertTriangle size={16} />
-                  <Text fw={600} size="sm">{lowStockProducts.length} productos con stock bajo</Text>
-                </Group>
-              </div>
-            )}
-          </Group>
-        )}
-
-        <Grid gutter="sm">
-          {/* Top productos - compacto */}
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <Card className="card-professional">
-              <Group justify="space-between" mb="sm">
-                <Group gap="xs">
-                  <TrendingUp size={18} />
-                  <Text fw={700} size="sm">Top Productos</Text>
-                </Group>
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, lg: 7 }}>
+          <Card withBorder radius="lg">
+            <Stack gap="md">
+              <Group justify="space-between">
+                <Text fw={700}>Movimientos del turno</Text>
+                <Badge variant="light" color="indigo">
+                  {latestOperations.length}
+                </Badge>
               </Group>
+              {latestOperations.length === 0 ? (
+                <Text c="dimmed" ta="center">
+                  Aún no hay ventas registradas en este turno.
+                </Text>
+              ) : (
+                <ScrollArea h={260}>
+                  <Table highlightOnHover>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Ticket</Table.Th>
+                        <Table.Th>Hora</Table.Th>
+                        <Table.Th>Tipo</Table.Th>
+                        <Table.Th>Método</Table.Th>
+                        <Table.Th>Total</Table.Th>
+                        <Table.Th>Acciones</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {latestOperations.map((sale) => {
+                        const payment = PAYMENT_OPTIONS.find((option) => option.id === sale.paymentMethod);
+                        return (
+                          <Table.Tr key={sale.id}>
+                            <Table.Td>#{sale.ticket}</Table.Td>
+                            <Table.Td>{formatTime(sale.created_at)}</Table.Td>
+                            <Table.Td>
+                              <Badge color={sale.type === "sale" ? "teal" : "red"} variant="light">
+                                {sale.type === "sale" ? "Venta" : "Devolución"}
+                              </Badge>
+                            </Table.Td>
+                            <Table.Td>{payment?.label ?? sale.paymentMethod.toUpperCase()}</Table.Td>
+                            <Table.Td>{formatCurrency(sale.total)}</Table.Td>
+                            <Table.Td>
+                              {sale.type === "sale" && (
+                                <Button
+                                  variant="light"
+                                  size="xs"
+                                  onClick={() => onEditSale(sale.id)}
+                                >
+                                  Ajustar método
+                                </Button>
+                              )}
+                            </Table.Td>
+                          </Table.Tr>
+                        );
+                      })}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </Stack>
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, lg: 5 }}>
+          <Card withBorder radius="lg">
+            <Stack gap="md">
+              <Text fw={700}>Cobros por método</Text>
+              {paymentData.length === 0 ? (
+                <Text c="dimmed" ta="center">
+                  Registra ventas para visualizar el detalle.
+                </Text>
+              ) : (
+                <div style={{ width: "100%", height: 220 }}>
+                  <ResponsiveContainer>
+                    <PieChart>
+                      <Pie data={paymentData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={90} paddingAngle={4}>
+                        {paymentData.map((entry) => (
+                          <Cell key={entry.method} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip formatter={(value: number) => formatCurrency(value)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
               <Stack gap="xs">
-                {topProducts.length > 0 ? (
-                  topProducts.map((item, index) => (
-                    <Paper key={index} withBorder p="xs" radius="sm">
-                      <Group justify="space-between" wrap="nowrap">
-                        <Group gap="xs">
-                          <Badge size="sm" variant="light" color="blue">{index + 1}</Badge>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <Text fw={600} size="sm" lineClamp={1}>{item.name}</Text>
-                            <Text size="xs" c="dimmed">{item.quantity} und.</Text>
-                          </div>
-                        </Group>
-                        <Text fw={700} c="teal" size="sm">
-                          {formatCurrency(item.revenue)}
-                        </Text>
+                {paymentData.map((entry) => (
+                  <Group key={entry.method} justify="space-between">
+                    <Text size="sm">{entry.name}</Text>
+                    <Text fw={600} size="sm">
+                      {formatCurrency(entry.value)}
+                    </Text>
+                  </Group>
+                ))}
+              </Stack>
+            </Stack>
+          </Card>
+        </Grid.Col>
+      </Grid>
+
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card withBorder radius="lg">
+            <Stack gap="md">
+              <Group gap="xs">
+                <TrendingUp size={18} />
+                <Text fw={700}>Top productos del turno</Text>
+              </Group>
+              {topProducts.length === 0 ? (
+                <Text c="dimmed" ta="center">
+                  Sin ventas registradas.
+                </Text>
+              ) : (
+                <Stack gap="sm">
+                  {topProducts.map((item, index) => (
+                    <Group key={item.name} justify="space-between">
+                      <Group gap="xs">
+                        <Badge color="indigo" variant="light">
+                          {index + 1}
+                        </Badge>
+                        <div>
+                          <Text fw={600}>{item.name}</Text>
+                          <Text size="xs" c="dimmed">{item.quantity} unidades</Text>
+                        </div>
                       </Group>
-                    </Paper>
-                  ))
-                ) : (
-                  <Text c="dimmed" ta="center" size="sm">Sin ventas</Text>
-                )}
-              </Stack>
-            </Card>
-          </Grid.Col>
-
-          {/* Métodos de pago - compacto */}
-          <Grid.Col span={{ base: 12, md: 6 }}>
-            <Card className="card-professional">
-              <Group justify="space-between" mb="sm">
-                <Group gap="xs">
-                  <PiggyBank size={18} />
-                  <Text fw={700} size="sm">Métodos de Pago</Text>
-                </Group>
+                      <Text fw={700}>{formatCurrency(item.revenue)}</Text>
+                    </Group>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card withBorder radius="lg">
+            <Stack gap="md">
+              <Group gap="xs">
+                <AlertTriangle size={18} />
+                <Text fw={700}>Inventario a vigilar</Text>
               </Group>
-              <Stack gap="xs">
-                {Array.from(paymentMethodStats.entries()).length > 0 ? (
-                  Array.from(paymentMethodStats.entries())
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([method, amount]) => {
-                      const option = PAYMENT_OPTIONS.find((opt) => opt.id === method);
-                      if (!option) return null;
-                      const percentage = todayRevenue > 0 ? (amount / todayRevenue * 100) : 0;
+              {lowStockSnapshot.length === 0 ? (
+                <Text c="dimmed" ta="center">
+                  Sin alertas de stock.
+                </Text>
+              ) : (
+                <Stack gap="sm">
+                  {lowStockSnapshot.map((product) => (
+                    <Group key={product.id} justify="space-between">
+                      <Text>{product.name}</Text>
+                      <Badge color="orange" variant="light">
+                        {product.stock} uds.
+                      </Badge>
+                    </Group>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Card>
+        </Grid.Col>
+      </Grid>
 
-                      return (
-                        <Paper key={method} withBorder p="xs" radius="sm">
-                          <Group justify="space-between" wrap="nowrap">
-                            <Group gap="xs">
-                              <ThemeIcon size="sm" color={option.accent} variant="light">
-                                <option.icon size={14} />
-                              </ThemeIcon>
-                              <div>
-                                <Text fw={600} size="sm">{option.label}</Text>
-                                <Text size="xs" c="dimmed">{percentage.toFixed(1)}%</Text>
-                              </div>
-                            </Group>
-                            <Text fw={700} size="sm">
-                              {formatCurrency(amount)}
-                            </Text>
-                          </Group>
-                        </Paper>
-                      );
-                    })
-                ) : (
-                  <Text c="dimmed" ta="center" size="sm">Sin ventas</Text>
-                )}
-              </Stack>
-            </Card>
-          </Grid.Col>
-
-          {/* Resumen de turno - removido para ahorrar espacio */}
-        </Grid>
-      </Stack>
-    </div>
+      <Card withBorder radius="lg">
+        <Stack gap="md">
+          <Group gap="xs">
+            <PiggyBank size={18} />
+            <Text fw={700}>Clientes con saldo pendiente</Text>
+          </Group>
+          {clientsWithDebt.length === 0 ? (
+            <Text c="dimmed" ta="center">
+              Sin deudas registradas.
+            </Text>
+          ) : (
+            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
+              {clientsWithDebt.map((client) => (
+                <Paper key={client.id} withBorder radius="md" p="sm">
+                  <Stack gap={2}>
+                    <Text fw={600} size="sm">{client.name}</Text>
+                    <Text size="xs" c="dimmed">
+                      Saldo: {formatCurrency(client.balance)}
+                    </Text>
+                  </Stack>
+                </Paper>
+              ))}
+            </SimpleGrid>
+          )}
+        </Stack>
+      </Card>
+    </Stack>
   );
 };
 
@@ -2662,76 +2820,199 @@ interface FiadosViewProps {
   onOpenModal: (clientId: string, mode: "abono" | "total") => void;
 }
 
-const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => (
-  <Stack gap="xl">
-    <Card withBorder radius="lg">
-      <Stack gap="md">
-        <Group justify="space-between">
-          <Title order={3}>Gestión de fiados</Title>
-          <Badge color="violet" variant="light">
-            {clients.filter((client) => client.authorized).length} clientes autorizados
-          </Badge>
-        </Group>
-        <ScrollArea h={460}>
-          <Table highlightOnHover striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Cliente</Table.Th>
-                <Table.Th>Estado</Table.Th>
-                <Table.Th>Límite</Table.Th>
-                <Table.Th>Saldo</Table.Th>
-                <Table.Th>Acciones</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {clients.map((client) => (
-                <Table.Tr key={client.id}>
-                  <Table.Td>{client.name}</Table.Td>
-                  <Table.Td>
-                    <Badge color={client.authorized ? "teal" : "red"} variant="light">
-                      {client.authorized ? "Autorizado" : "Bloqueado"}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>{formatCurrency(client.limit)}</Table.Td>
-                  <Table.Td>{formatCurrency(client.balance)}</Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Button
-                        size="xs"
-                        variant="default"
-                        onClick={() => onAuthorize(client.id, !client.authorized)}
-                      >
-                        {client.authorized ? "Bloquear" : "Autorizar"}
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="light"
-                        leftSection={<Coins size={16} />}
-                        onClick={() => onOpenModal(client.id, "abono")}
-                        disabled={client.balance === 0}
-                      >
-                        Registrar abono
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        leftSection={<PiggyBank size={16} />}
-                        onClick={() => onOpenModal(client.id, "total")}
-                        disabled={client.balance === 0}
-                      >
-                        Pago total
-                      </Button>
-                    </Group>
-                  </Table.Td>
+const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => {
+  const totalDebt = clients.reduce((acc, client) => acc + client.balance, 0);
+  const authorizedCount = clients.filter((client) => client.authorized).length;
+  const blockedCount = clients.length - authorizedCount;
+  const topDebtors = clients
+    .filter((client) => client.balance > 0)
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 5);
+
+  const movementTimeline = clients
+    .flatMap((client) => client.history.map((item) => ({ ...item, client: client.name })))
+    .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf());
+
+  return (
+    <Stack gap="xl">
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+        <Paper withBorder radius="lg" p="md" style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(147,197,253,0.18))" }}>
+          <Stack gap={4}>
+            <Group gap="xs">
+              <ThemeIcon color="indigo" variant="light">
+                <UsersRound size={18} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed">
+                Clientes autorizados
+              </Text>
+            </Group>
+            <Text fw={700} fz="xl">{authorizedCount}</Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder radius="lg" p="md" style={{ background: "linear-gradient(135deg, rgba(248,113,113,0.12), rgba(251,191,36,0.18))" }}>
+          <Stack gap={4}>
+            <Group gap="xs">
+              <ThemeIcon color="orange" variant="light">
+                <AlertTriangle size={18} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed">
+                Clientes bloqueados
+              </Text>
+            </Group>
+            <Text fw={700} fz="xl">{blockedCount}</Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder radius="lg" p="md" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(45,212,191,0.18))" }}>
+          <Stack gap={4}>
+            <Group gap="xs">
+              <ThemeIcon color="teal" variant="light">
+                <PiggyBank size={18} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed">
+                Deuda total
+              </Text>
+            </Group>
+            <Text fw={700} fz="xl">{formatCurrency(totalDebt)}</Text>
+          </Stack>
+        </Paper>
+      </SimpleGrid>
+
+      <Card withBorder radius="lg">
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Title order={3}>Gestión de fiados</Title>
+            <Badge color="violet" variant="light">
+              {authorizedCount} autorizados
+            </Badge>
+          </Group>
+          <ScrollArea h={460}>
+            <Table highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Cliente</Table.Th>
+                  <Table.Th>Estado</Table.Th>
+                  <Table.Th>Límite</Table.Th>
+                  <Table.Th>Saldo</Table.Th>
+                  <Table.Th>Acciones</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      </Stack>
-    </Card>
-  </Stack>
-);
+              </Table.Thead>
+              <Table.Tbody>
+                {clients.map((client) => (
+                  <Table.Tr key={client.id}>
+                    <Table.Td>{client.name}</Table.Td>
+                    <Table.Td>
+                      <Badge color={client.authorized ? "teal" : "red"} variant="light">
+                        {client.authorized ? "Autorizado" : "Bloqueado"}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>{formatCurrency(client.limit)}</Table.Td>
+                    <Table.Td>
+                      <Text fw={600} c={client.balance > 0 ? "red" : "teal"}>
+                        {formatCurrency(client.balance)}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Button
+                          size="xs"
+                          variant="default"
+                          onClick={() => onAuthorize(client.id, !client.authorized)}
+                        >
+                          {client.authorized ? "Bloquear" : "Autorizar"}
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          leftSection={<Coins size={16} />}
+                          onClick={() => onOpenModal(client.id, "abono")}
+                          disabled={client.balance === 0}
+                        >
+                          Registrar abono
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          leftSection={<PiggyBank size={16} />}
+                          onClick={() => onOpenModal(client.id, "total")}
+                          disabled={client.balance === 0}
+                        >
+                          Pago total
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        </Stack>
+      </Card>
+
+      <Grid gutter="md">
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card withBorder radius="lg">
+            <Stack gap="md">
+              <Group gap="xs">
+                <TrendingUp size={18} />
+                <Text fw={700}>Principales deudores</Text>
+              </Group>
+              {topDebtors.length === 0 ? (
+                <Text c="dimmed" ta="center">
+                  Todos los clientes están al día.
+                </Text>
+              ) : (
+                <Stack gap="sm">
+                  {topDebtors.map((client) => (
+                    <Group key={client.id} justify="space-between">
+                      <Text>{client.name}</Text>
+                      <Text fw={600}>{formatCurrency(client.balance)}</Text>
+                    </Group>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card withBorder radius="lg">
+            <Stack gap="md">
+              <Group gap="xs">
+                <Receipt size={18} />
+                <Text fw={700}>Historial de movimientos</Text>
+              </Group>
+              {movementTimeline.length === 0 ? (
+                <Text c="dimmed" ta="center">
+                  Aún no registras movimientos de fiado.
+                </Text>
+              ) : (
+                <ScrollArea h={240}>
+                  <Stack gap="sm">
+                    {movementTimeline.map((movement) => (
+                      <Paper key={movement.id} withBorder radius="md" p="sm">
+                        <Stack gap={2}>
+                          <Group justify="space-between">
+                            <Text fw={600}>{movement.client}</Text>
+                            <Text size="xs" c="dimmed">
+                              {formatDateTime(movement.timestamp)}
+                            </Text>
+                          </Group>
+                          <Text size="sm">{movement.description}</Text>
+                          <Text size="xs" c="dimmed">
+                            Saldo: {formatCurrency(movement.balance)}
+                          </Text>
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Stack>
+                </ScrollArea>
+              )}
+            </Stack>
+          </Card>
+        </Grid.Col>
+      </Grid>
+    </Stack>
+  );
+};
 
 interface ReportsViewProps {
   filters: ReportFilters;
@@ -2912,102 +3193,143 @@ interface ShiftsViewProps {
   history: Shift[];
 }
 
-const ShiftsView = ({ activeShift, summary, history }: ShiftsViewProps) => (
-  <Stack gap="xl">
-    <Card withBorder radius="lg">
-      <Stack gap="md">
-        <Title order={3}>Turnos</Title>
-        {activeShift ? (
-          <Paper withBorder p="md" radius="md">
-            <Stack gap="sm">
-              <Group justify="space-between">
-                <Text fw={600}>{activeShift.seller}</Text>
-                <Badge color="teal" variant="light">
-                  Turno {activeShift.type === "dia" ? "día" : "noche"}
-                </Badge>
-              </Group>
-              <Text size="sm" c="dimmed">
-                Inicio: {formatDateTime(activeShift.start)}
-              </Text>
-              <Divider />
-              <Group justify="space-between">
-                <Text>Total ventas</Text>
-                <Text fw={700}>{formatCurrency(summary.total)}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text>Tickets</Text>
-                <Text fw={700}>{summary.tickets}</Text>
-              </Group>
-              {Object.entries(summary.byPayment).map(([method, value]) => (
-                <Group key={method} justify="space-between">
-                  <Text c="dimmed">{method.toUpperCase()}</Text>
-                  <Text fw={600}>{formatCurrency(value)}</Text>
-                </Group>
-              ))}
-            </Stack>
-          </Paper>
-        ) : (
-          <Paper withBorder p="lg" radius="md">
-            <Text c="dimmed" ta="center">
-              No hay turnos activos. Inicia uno desde el encabezado.
+const ShiftsView = ({ activeShift, summary, history }: ShiftsViewProps) => {
+  const closedCount = history.length;
+  const totalSales = history.reduce((acc, shift) => acc + (shift.total_sales ?? 0), 0);
+  const totalDifferences = history.reduce((acc, shift) => acc + (shift.difference ?? 0), 0);
+  const averageSales = closedCount > 0 ? totalSales / closedCount : 0;
+
+  return (
+    <Stack gap="xl">
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+        <Paper withBorder radius="lg" p="md">
+          <Stack gap={4}>
+            <Text size="sm" c="dimmed">
+              Turnos cerrados
             </Text>
-          </Paper>
-        )}
-      </Stack>
-    </Card>
-    <Card withBorder radius="lg">
-      <Stack gap="md">
-        <Group justify="space-between">
-          <Title order={4}>Historial de turnos</Title>
-          <Badge color="indigo" variant="light">
-            {history.length} turnos
-          </Badge>
-        </Group>
-        <ScrollArea h={420}>
-          <Table highlightOnHover striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Vendedor</Table.Th>
-                <Table.Th>Inicio</Table.Th>
-                <Table.Th>Cierre</Table.Th>
-                <Table.Th>Turno</Table.Th>
-                <Table.Th>Ventas</Table.Th>
-                <Table.Th>Efectivo</Table.Th>
-                <Table.Th>Diferencia</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {history.length === 0 ? (
+            <Text fw={700} fz="xl">
+              {closedCount}
+            </Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder radius="lg" p="md">
+          <Stack gap={4}>
+            <Text size="sm" c="dimmed">
+              Ventas promedio
+            </Text>
+            <Text fw={700} fz="xl">
+              {formatCurrency(averageSales)}
+            </Text>
+          </Stack>
+        </Paper>
+        <Paper withBorder radius="lg" p="md">
+          <Stack gap={4}>
+            <Text size="sm" c="dimmed">
+              Diferencia acumulada
+            </Text>
+            <Text fw={700} fz="xl" c={totalDifferences === 0 ? "teal" : totalDifferences > 0 ? "green" : "orange"}>
+              {formatCurrency(totalDifferences)}
+            </Text>
+          </Stack>
+        </Paper>
+      </SimpleGrid>
+
+      <Card withBorder radius="lg">
+        <Stack gap="md">
+          <Title order={3}>Turno en curso</Title>
+          {activeShift ? (
+            <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, rgba(13,148,136,0.12), rgba(45,212,191,0.18))" }}>
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Text fw={600}>{activeShift.seller}</Text>
+                  <Badge color="teal" variant="light">
+                    Turno {activeShift.type === "dia" ? "día" : "noche"}
+                  </Badge>
+                </Group>
+                <Text size="sm" c="dimmed">
+                  Inicio: {formatDateTime(activeShift.start)}
+                </Text>
+                <Divider />
+                <Group justify="space-between">
+                  <Text>Total ventas</Text>
+                  <Text fw={700}>{formatCurrency(summary.total)}</Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text>Tickets</Text>
+                  <Text fw={700}>{summary.tickets}</Text>
+                </Group>
+                {Object.entries(summary.byPayment).map(([method, value]) => (
+                  <Group key={method} justify="space-between">
+                    <Text c="dimmed">{method.toUpperCase()}</Text>
+                    <Text fw={600}>{formatCurrency(value)}</Text>
+                  </Group>
+                ))}
+              </Stack>
+            </Paper>
+          ) : (
+            <Paper withBorder p="lg" radius="md">
+              <Text c="dimmed" ta="center">
+                No hay turnos activos. Inicia uno desde el encabezado.
+              </Text>
+            </Paper>
+          )}
+        </Stack>
+      </Card>
+
+      <Card withBorder radius="lg">
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Title order={4}>Historial de turnos</Title>
+            <Badge color="indigo" variant="light">
+              {history.length} turnos
+            </Badge>
+          </Group>
+          <ScrollArea h={420}>
+            <Table highlightOnHover>
+              <Table.Thead>
                 <Table.Tr>
-                  <Table.Td colSpan={7}>
-                    <Text c="dimmed" ta="center">
-                      Aún no se registran turnos cerrados.
-                    </Text>
-                  </Table.Td>
+                  <Table.Th>Vendedor</Table.Th>
+                  <Table.Th>Inicio</Table.Th>
+                  <Table.Th>Cierre</Table.Th>
+                  <Table.Th>Turno</Table.Th>
+                  <Table.Th>Ventas</Table.Th>
+                  <Table.Th>Efectivo</Table.Th>
+                  <Table.Th>Diferencia</Table.Th>
                 </Table.Tr>
-              ) : (
-                history.map((shift) => (
-                  <Table.Tr key={shift.id}>
-                    <Table.Td>{shift.seller}</Table.Td>
-                    <Table.Td>{formatDateTime(shift.start)}</Table.Td>
-                    <Table.Td>{shift.end ? formatDateTime(shift.end) : "-"}</Table.Td>
-                    <Table.Td>{shift.type === "dia" ? "Día" : "Noche"}</Table.Td>
-                    <Table.Td>{formatCurrency(shift.total_sales ?? 0)}</Table.Td>
-                    <Table.Td>{formatCurrency(shift.cash_expected ?? 0)}</Table.Td>
-                    <Table.Td>
-                      <Badge color={(shift.difference ?? 0) === 0 ? "teal" : (shift.difference ?? 0) > 0 ? "green" : "orange"}>
-                        {formatCurrency(shift.difference ?? 0)}
-                      </Badge>
+              </Table.Thead>
+              <Table.Tbody>
+                {history.length === 0 ? (
+                  <Table.Tr>
+                    <Table.Td colSpan={7}>
+                      <Text c="dimmed" ta="center">
+                        Aún no se registran turnos cerrados.
+                      </Text>
                     </Table.Td>
                   </Table.Tr>
-                ))
-              )}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      </Stack>
-    </Card>
-  </Stack>
-);
+                ) : (
+                  history.map((shift) => (
+                    <Table.Tr key={shift.id}>
+                      <Table.Td>{shift.seller}</Table.Td>
+                      <Table.Td>{formatDateTime(shift.start)}</Table.Td>
+                      <Table.Td>{shift.end ? formatDateTime(shift.end) : "-"}</Table.Td>
+                      <Table.Td>{shift.type === "dia" ? "Día" : "Noche"}</Table.Td>
+                      <Table.Td>{formatCurrency(shift.total_sales ?? 0)}</Table.Td>
+                      <Table.Td>{formatCurrency(shift.cash_expected ?? 0)}</Table.Td>
+                      <Table.Td>
+                        <Badge color={(shift.difference ?? 0) === 0 ? "teal" : (shift.difference ?? 0) > 0 ? "green" : "orange"}>
+                          {formatCurrency(shift.difference ?? 0)}
+                        </Badge>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                )}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        </Stack>
+      </Card>
+    </Stack>
+  );
+};
 
 export default App;
