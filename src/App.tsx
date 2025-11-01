@@ -84,7 +84,7 @@ import {
   ShiftType
 } from "./types";
 import { FALLBACK_CLIENTS, FALLBACK_PRODUCTS, FALLBACK_SALES, FALLBACK_SHIFTS } from "./data/fallback";
-import { formatCurrency, formatDate, formatDateTime } from "./utils/format";
+import { formatCurrency, formatDate, formatDateTime, formatTime } from "./utils/format";
 
 dayjs.extend(relativeTime);
 dayjs.locale("es");
@@ -2837,7 +2837,7 @@ const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => {
           client: client.name
         }))
       )
-      .sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf());
+      .sort((a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf());
 
   return (
     <Stack gap="xl">
@@ -2999,12 +2999,12 @@ const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => {
                           <Group justify="space-between">
                             <Text fw={600}>{movement.client}</Text>
                             <Text size="xs" c="dimmed">
-                              {formatDateTime(movement.timestamp)}
+                              {formatDateTime(movement.created_at)}
                             </Text>
                           </Group>
                           <Text size="sm">{movement.description}</Text>
                           <Text size="xs" c="dimmed">
-                            Saldo: {formatCurrency(movement.balance)}
+                            Saldo: {formatCurrency(movement.balance_after)}
                           </Text>
                         </Stack>
                       </Paper>
