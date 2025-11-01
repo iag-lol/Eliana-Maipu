@@ -1921,6 +1921,7 @@ const App = () => {
                                 label="Efectivo recibido"
                                 placeholder="Monto entregado por el cliente"
                                 thousandSeparator="."
+                                decimalSeparator=","
                                 value={cashReceived ?? undefined}
                                 onChange={(value) => {
                                   if (value === "" || value === null) {
@@ -2287,6 +2288,7 @@ const ProductForm = ({ categories, onSubmit }: ProductFormProps) => {
         label="Precio"
         placeholder="CLP"
         thousandSeparator="."
+        decimalSeparator=","
         value={price ?? undefined}
         min={0}
         onChange={(value) => {
