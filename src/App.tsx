@@ -1,3 +1,4 @@
+import "./App.css";
 import {
   ActionIcon,
   AppShell,
@@ -43,6 +44,7 @@ import {
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import {
+  AlertTriangle,
   BadgeCheck,
   BarChart3,
   BoxIcon,
@@ -87,7 +89,7 @@ dayjs.extend(relativeTime);
 
 const ADMIN_PASSWORD = "eliana152100";
 
-type TabId = "pos" | "inventory" | "fiados" | "reports" | "shifts";
+type TabId = "dashboard" | "pos" | "inventory" | "fiados" | "reports" | "shifts";
 
 interface TabConfig {
   id: TabId;
@@ -97,6 +99,7 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "pos", label: "Punto de venta", icon: ShoppingCart },
   { id: "inventory", label: "Inventario", icon: BoxIcon, adminOnly: true },
   { id: "fiados", label: "Clientes fiados", icon: UsersRound, adminOnly: true },
@@ -885,7 +888,7 @@ const App = () => {
   const isMobile = useMediaQuery("(max-width: 768px)");
   const { colorScheme, setColorScheme } = useMantineColorScheme();
 
-  const [activeTab, setActiveTab] = useState<TabId>("pos");
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [pendingTab, setPendingTab] = useState<TabId | null>(null);
   const [passwordModalOpened, { open: openPasswordModal, close: closePasswordModal }] = useDisclosure(false);
@@ -1560,46 +1563,57 @@ const App = () => {
       }}
       padding="lg"
     >
-      <AppShell.Header>
-        <Group justify="space-between" h="100%" px="lg">
-          <Group gap="sm">
-            <ThemeIcon size={40} radius="md" color="indigo">
-              <LayoutDashboard size={22} />
+      <AppShell.Header className="header-professional">
+        <Group justify="space-between" h="100%">
+          <Group gap="md">
+            <ThemeIcon size={48} radius="lg" variant="white" color="rgba(255,255,255,0.2)" style={{ boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
+              <LayoutDashboard size={26} color="white" />
             </ThemeIcon>
-            <Stack gap={0}>
-              <Title order={4}>Negocio Eliana Maipú</Title>
-              <Text size="sm" c="dimmed">
-                Plataforma avanzada de gestión comercial
+            <Stack gap={2}>
+              <Text className="header-title">Negocio Eliana Maipú</Text>
+              <Text className="header-subtitle">
+                Sistema de gestión comercial • {dayjs().format("DD/MM/YYYY")}
               </Text>
             </Stack>
           </Group>
-          <Group gap="sm">
+          <Group gap="md">
+            {activeShift ? (
+              <Badge size="lg" variant="white" color="rgba(255,255,255,0.2)" style={{ color: "white", fontWeight: 600, padding: "0.75rem 1.25rem", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                <Group gap="xs">
+                  <div className="status-indicator active" style={{ background: "#51cf66" }}></div>
+                  Turno: {activeShift.seller}
+                </Group>
+              </Badge>
+            ) : null}
             {activeShift ? (
               <Button
-                variant="outline"
+                variant="white"
                 leftSection={<RefreshCcw size={18} />}
                 onClick={() => {
                   setShiftModalMode("close");
                   shiftModalHandlers.open();
                 }}
+                style={{ fontWeight: 600 }}
               >
                 Cerrar turno
               </Button>
             ) : (
               <Button
+                variant="white"
                 leftSection={<Clock3 size={18} />}
                 onClick={() => {
                   setShiftModalMode("open");
                   shiftModalHandlers.open();
                 }}
+                style={{ fontWeight: 600 }}
               >
                 Abrir turno
               </Button>
             )}
             <Tooltip label={colorScheme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}>
               <ActionIcon
-                variant="light"
-                color="indigo"
+                variant="white"
+                color="rgba(255,255,255,0.2)"
                 onClick={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")}
                 size="lg"
                 radius="md"
@@ -1609,8 +1623,8 @@ const App = () => {
             </Tooltip>
             <Tooltip label={customerDisplay ? "Cerrar vista cliente" : "Abrir vista cliente"}>
               <ActionIcon
-                variant="outline"
-                color={customerDisplay ? "red" : "indigo"}
+                variant="white"
+                color={customerDisplay ? "red" : "rgba(255,255,255,0.2)"}
                 size="lg"
                 radius="md"
                 onClick={() => setCustomerDisplay((prev) => !prev)}
@@ -1622,42 +1636,66 @@ const App = () => {
         </Group>
       </AppShell.Header>
 
-      <AppShell.Navbar p="md">
-        <Stack gap="sm">
+      <AppShell.Navbar p="md" className="sidebar-nav">
+        <Stack gap="xs">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const disabled = tab.adminOnly && !adminUnlocked;
+            const isActive = activeTab === tab.id;
+            const hasLowStockAlert = tab.id === "inventory" && products.filter(p => p.stock <= p.minStock).length > 0;
+
             return (
-              <Button
+              <div
                 key={tab.id}
-                variant={activeTab === tab.id ? "light" : "subtle"}
-                color="indigo"
-                leftSection={<Icon size={18} />}
-                onClick={() => guardTabChange(tab.id)}
-                disabled={disabled}
+                className={`nav-item ${isActive ? "active" : ""}`}
+                onClick={() => !disabled && guardTabChange(tab.id)}
+                style={{
+                  opacity: disabled ? 0.5 : 1,
+                  cursor: disabled ? "not-allowed" : "pointer"
+                }}
               >
-                {tab.label}
-              </Button>
+                <div className="nav-item-icon">
+                  <Icon size={22} />
+                </div>
+                <Text style={{ flex: 1 }}>{tab.label}</Text>
+                {hasLowStockAlert && !disabled && (
+                  <div className="nav-item-badge">
+                    {products.filter(p => p.stock <= p.minStock).length}
+                  </div>
+                )}
+                {disabled && (
+                  <Badge size="xs" color="gray" variant="dot">Bloqueado</Badge>
+                )}
+              </div>
             );
           })}
         </Stack>
         {!adminUnlocked && (
-          <Paper mt="auto" withBorder p="md" radius="md">
+          <Paper mt="auto" withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, #f8f9fa, white)", border: "2px solid #e9ecef" }}>
             <Stack gap="sm">
-              <Text size="sm" fw={600}>
-                Área restringida
-              </Text>
-              <Text size="sm" c="dimmed">
-                Las secciones administrativas requieren autenticación.
+              <Group gap="xs">
+                <ThemeIcon color="indigo" variant="light" size="md">
+                  <ShieldCheck size={18} />
+                </ThemeIcon>
+                <Text size="sm" fw={700} style={{ color: "#495057" }}>
+                  Área restringida
+                </Text>
+              </Group>
+              <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
+                Las secciones administrativas requieren autenticación para acceder.
               </Text>
               <Button
-                leftSection={<ShieldCheck size={18} />}
+                fullWidth
+                variant="gradient"
+                gradient={{ from: "indigo", to: "blue", deg: 90 }}
+                leftSection={<KeyRound size={18} />}
                 onClick={() => {
                   setPendingTab(activeTab);
                   openPasswordModal();
                 }}
+                style={{ fontWeight: 600, boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}
               >
-                Desbloquear
+                Desbloquear acceso
               </Button>
             </Stack>
           </Paper>
@@ -1675,6 +1713,15 @@ const App = () => {
           />
         ) : (
           <Stack gap="xl">
+            {activeTab === "dashboard" && (
+              <DashboardView
+                products={products}
+                sales={sales}
+                clients={clients}
+                activeShift={activeShift}
+                shiftSummary={shiftSummary}
+              />
+            )}
             {activeTab === "pos" && (
               <Stack gap="xl">
                 <Grid gutter="xl">
@@ -2364,6 +2411,288 @@ const InventoryTable = ({ products }: { products: Product[] }) => (
     </Stack>
   </Card>
 );
+
+interface DashboardViewProps {
+  products: Product[];
+  sales: Sale[];
+  clients: Client[];
+  activeShift: Shift | undefined;
+  shiftSummary: ShiftSummary;
+}
+
+const DashboardView = ({ products, sales, clients, activeShift, shiftSummary }: DashboardViewProps) => {
+  const today = dayjs().startOf("day");
+  const todaySales = sales.filter((sale) => dayjs(sale.created_at).isAfter(today));
+  const todayRevenue = todaySales.reduce((acc, sale) => acc + sale.total, 0);
+  const todayTickets = todaySales.length;
+
+  const lowStockProducts = products.filter((product) => product.stock <= product.minStock);
+  const outOfStockProducts = products.filter((product) => product.stock === 0);
+
+  const authorizedClientsCount = clients.filter((client) => client.authorized).length;
+  const totalDebt = clients.reduce((acc, client) => acc + client.balance, 0);
+
+  const weekAgo = dayjs().subtract(7, "day");
+  const lastWeekSales = sales.filter((sale) =>
+    dayjs(sale.created_at).isAfter(weekAgo) && dayjs(sale.created_at).isBefore(today)
+  );
+  const lastWeekRevenue = lastWeekSales.reduce((acc, sale) => acc + sale.total, 0);
+  const revenueChange = lastWeekRevenue > 0 ? ((todayRevenue - lastWeekRevenue) / lastWeekRevenue * 100) : 0;
+
+  const topProducts = useMemo(() => {
+    const productSales = new Map<string, { name: string; quantity: number; revenue: number }>();
+
+    todaySales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const existing = productSales.get(item.productId) || { name: item.name, quantity: 0, revenue: 0 };
+        productSales.set(item.productId, {
+          name: item.name,
+          quantity: existing.quantity + item.quantity,
+          revenue: existing.revenue + (item.price * item.quantity)
+        });
+      });
+    });
+
+    return Array.from(productSales.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
+  }, [todaySales]);
+
+  const paymentMethodStats = useMemo(() => {
+    const stats = new Map<PaymentMethod, number>();
+    todaySales.forEach((sale) => {
+      const current = stats.get(sale.paymentMethod) || 0;
+      stats.set(sale.paymentMethod, current + sale.total);
+    });
+    return stats;
+  }, [todaySales]);
+
+  return (
+    <Stack gap="xl" className="app-container">
+      {/* Header del Dashboard */}
+      <Group justify="space-between" wrap="nowrap">
+        <div>
+          <Title order={2} style={{ fontSize: "2rem", fontWeight: 700, color: "#212529" }}>
+            Dashboard
+          </Title>
+          <Text c="dimmed" size="sm">
+            Vista general del negocio - {dayjs().format("dddd, D [de] MMMM [de] YYYY")}
+          </Text>
+        </div>
+        {activeShift && (
+          <Badge size="lg" variant="gradient" gradient={{ from: "teal", to: "lime", deg: 90 }} className="badge-professional">
+            <div className="status-indicator active"></div>
+            Turno activo: {activeShift.seller}
+          </Badge>
+        )}
+      </Group>
+
+      {/* Métricas principales */}
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg">
+        <div className="stat-card">
+          <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #12b886, #0ca678)" }}>
+            <Coins size={28} color="white" />
+          </div>
+          <div className="stat-card-value">{formatCurrency(todayRevenue)}</div>
+          <div className="stat-card-label">Ventas de hoy</div>
+          {revenueChange !== 0 && (
+            <div className={`stat-card-trend ${revenueChange > 0 ? "positive" : "negative"}`}>
+              {revenueChange > 0 ? "↑" : "↓"} {Math.abs(revenueChange).toFixed(1)}% vs ayer
+            </div>
+          )}
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #4263eb, #3b5bdb)" }}>
+            <Receipt size={28} color="white" />
+          </div>
+          <div className="stat-card-value">{todayTickets}</div>
+          <div className="stat-card-label">Tickets generados</div>
+          <div className="stat-card-trend positive">
+            Promedio: {formatCurrency(todayTickets > 0 ? todayRevenue / todayTickets : 0)}
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #f76707, #e8590c)" }}>
+            <UsersRound size={28} color="white" />
+          </div>
+          <div className="stat-card-value">{authorizedClientsCount}</div>
+          <div className="stat-card-label">Clientes autorizados</div>
+          <div className="stat-card-trend negative">
+            Deuda total: {formatCurrency(totalDebt)}
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-card-icon" style={{ background: "linear-gradient(135deg, #fa5252, #e03131)" }}>
+            <TrendingUp size={28} color="white" />
+          </div>
+          <div className="stat-card-value">{lowStockProducts.length}</div>
+          <div className="stat-card-label">Alertas de stock</div>
+          {outOfStockProducts.length > 0 && (
+            <div className="stat-card-trend negative">
+              {outOfStockProducts.length} sin stock
+            </div>
+          )}
+        </div>
+      </SimpleGrid>
+
+      {/* Alertas importantes */}
+      {(lowStockProducts.length > 0 || !activeShift) && (
+        <Stack gap="sm">
+          {!activeShift && (
+            <div className="alert-professional alert-warning">
+              <Group gap="sm">
+                <ThemeIcon color="yellow" variant="light" size="lg">
+                  <AlertTriangle size={20} />
+                </ThemeIcon>
+                <div>
+                  <Text fw={600}>No hay turno activo</Text>
+                  <Text size="sm">Abre un turno para comenzar a registrar ventas</Text>
+                </div>
+              </Group>
+            </div>
+          )}
+          {lowStockProducts.length > 0 && (
+            <div className="alert-professional alert-warning">
+              <Group gap="sm">
+                <ThemeIcon color="orange" variant="light" size="lg">
+                  <AlertTriangle size={20} />
+                </ThemeIcon>
+                <div>
+                  <Text fw={600}>{lowStockProducts.length} productos con stock bajo</Text>
+                  <Text size="sm">Revisa el inventario y realiza pedidos</Text>
+                </div>
+              </Group>
+            </div>
+          )}
+        </Stack>
+      )}
+
+      <Grid gutter="lg">
+        {/* Top productos */}
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card className="card-professional" h="100%">
+            <div className="card-header">
+              <div className="card-title">
+                <TrendingUp size={24} />
+                Top 5 Productos del Día
+              </div>
+            </div>
+            <Stack gap="md">
+              {topProducts.length > 0 ? (
+                topProducts.map((item, index) => (
+                  <Paper key={index} withBorder p="md" radius="md" style={{ transition: "all 0.2s" }}>
+                    <Group justify="space-between" wrap="nowrap">
+                      <Group gap="md">
+                        <ThemeIcon size="lg" variant="light" color="blue" radius="xl">
+                          <Text fw={700}>{index + 1}</Text>
+                        </ThemeIcon>
+                        <div>
+                          <Text fw={600} lineClamp={1}>{item.name}</Text>
+                          <Text size="sm" c="dimmed">{item.quantity} unidades vendidas</Text>
+                        </div>
+                      </Group>
+                      <Text fw={700} c="teal" style={{ fontSize: "1.1rem" }}>
+                        {formatCurrency(item.revenue)}
+                      </Text>
+                    </Group>
+                  </Paper>
+                ))
+              ) : (
+                <div className="alert-professional alert-info">
+                  <Text c="dimmed" ta="center">No hay ventas registradas hoy</Text>
+                </div>
+              )}
+            </Stack>
+          </Card>
+        </Grid.Col>
+
+        {/* Métodos de pago */}
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <Card className="card-professional" h="100%">
+            <div className="card-header">
+              <div className="card-title">
+                <PiggyBank size={24} />
+                Métodos de Pago
+              </div>
+            </div>
+            <Stack gap="md">
+              {Array.from(paymentMethodStats.entries()).length > 0 ? (
+                Array.from(paymentMethodStats.entries())
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([method, amount]) => {
+                    const option = PAYMENT_OPTIONS.find((opt) => opt.id === method);
+                    if (!option) return null;
+                    const percentage = todayRevenue > 0 ? (amount / todayRevenue * 100) : 0;
+
+                    return (
+                      <Paper key={method} withBorder p="md" radius="md">
+                        <Group justify="space-between" wrap="nowrap">
+                          <Group gap="md">
+                            <ThemeIcon size="lg" color={option.accent} variant="light">
+                              <option.icon size={20} />
+                            </ThemeIcon>
+                            <div>
+                              <Text fw={600}>{option.label}</Text>
+                              <Text size="sm" c="dimmed">{percentage.toFixed(1)}% del total</Text>
+                            </div>
+                          </Group>
+                          <Text fw={700} style={{ fontSize: "1.1rem" }}>
+                            {formatCurrency(amount)}
+                          </Text>
+                        </Group>
+                      </Paper>
+                    );
+                  })
+              ) : (
+                <div className="alert-professional alert-info">
+                  <Text c="dimmed" ta="center">No hay ventas registradas hoy</Text>
+                </div>
+              )}
+            </Stack>
+          </Card>
+        </Grid.Col>
+
+        {/* Resumen de turno actual */}
+        {activeShift && (
+          <Grid.Col span={12}>
+            <Card className="card-professional">
+              <div className="card-header">
+                <div className="card-title">
+                  <Clock3 size={24} />
+                  Resumen del Turno Actual
+                </div>
+                <Badge size="lg" color="teal" variant="light">
+                  {activeShift.type === "dia" ? "Turno Día" : "Turno Noche"}
+                </Badge>
+              </div>
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="lg">
+                <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, #f8f9fa, white)" }}>
+                  <Text size="sm" c="dimmed" mb="xs">Vendedor</Text>
+                  <Text fw={700} size="lg">{activeShift.seller}</Text>
+                </Paper>
+                <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, #f8f9fa, white)" }}>
+                  <Text size="sm" c="dimmed" mb="xs">Inicio</Text>
+                  <Text fw={700} size="lg">{formatDateTime(activeShift.start)}</Text>
+                </Paper>
+                <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, #f8f9fa, white)" }}>
+                  <Text size="sm" c="dimmed" mb="xs">Total ventas</Text>
+                  <Text fw={700} size="lg" c="teal">{formatCurrency(shiftSummary.total)}</Text>
+                </Paper>
+                <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, #f8f9fa, white)" }}>
+                  <Text size="sm" c="dimmed" mb="xs">Tickets</Text>
+                  <Text fw={700} size="lg">{shiftSummary.tickets}</Text>
+                </Paper>
+              </SimpleGrid>
+            </Card>
+          </Grid.Col>
+        )}
+      </Grid>
+    </Stack>
+  );
+};
 
 interface FiadosViewProps {
   clients: Client[];
