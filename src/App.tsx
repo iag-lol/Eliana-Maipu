@@ -2649,7 +2649,16 @@ const App = () => {
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, xl: 5 }}>
                     <Stack gap="md">
-                      <Card withBorder radius="lg" shadow="sm">
+                      <Card
+                        withBorder
+                        radius="lg"
+                        shadow="md"
+                        style={{
+                          borderWidth: "2px",
+                          borderColor: "rgba(59, 130, 246, 0.4)",
+                          boxShadow: "0 4px 16px rgba(59, 130, 246, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08)"
+                        }}
+                      >
                         <Stack gap="md">
                           <Group justify="space-between">
                             <Title order={4}>Carrito de venta</Title>
