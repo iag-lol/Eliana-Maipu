@@ -55,14 +55,19 @@ import {
   CreditCard,
   ArrowLeftRight,
   Coins,
+  Edit,
+  Filter,
   KeyRound,
   LayoutDashboard,
   LucideIcon,
   MonitorPlay,
   Moon,
+  Package,
   PiggyBank,
+  Plus,
   Receipt,
   RefreshCcw,
+  Search,
   ShieldCheck,
   ShoppingCart,
   Sun,
@@ -70,7 +75,8 @@ import {
   UserPlus,
   UsersRound,
   Wallet,
-  Waypoints
+  Waypoints,
+  X
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import {
@@ -775,6 +781,262 @@ const ClientModal = ({ opened, onClose, onCreateClient }: ClientModalProps) => {
   );
 };
 
+interface AddStockModalProps {
+  opened: boolean;
+  onClose: () => void;
+  products: Product[];
+  selectedProductId: string | null;
+  onConfirm: (productId: string, quantity: number, reason: string) => void;
+}
+
+const AddStockModal = ({ opened, onClose, products, selectedProductId, onConfirm }: AddStockModalProps) => {
+  const [productId, setProductId] = useState<string | null>(selectedProductId);
+  const [quantity, setQuantity] = useState<number | undefined>(undefined);
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (opened) {
+      setProductId(selectedProductId);
+      setQuantity(undefined);
+      setReason("");
+    }
+  }, [opened, selectedProductId]);
+
+  if (!opened) return null;
+
+  const selectedProduct = products.find((p) => p.id === productId);
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Agregar stock" centered size="md">
+      <Stack gap="lg">
+        <Select
+          label="Producto"
+          placeholder="Selecciona un producto"
+          data={products.map((p) => ({ value: p.id, label: `${p.name} - ${p.category}` }))}
+          value={productId}
+          onChange={setProductId}
+          searchable
+        />
+        {selectedProduct && (
+          <Paper withBorder p="sm" radius="md" style={{ background: "rgba(59,130,246,0.05)" }}>
+            <Stack gap={4}>
+              <Text size="sm" fw={600}>{selectedProduct.name}</Text>
+              <Text size="xs" c="dimmed">Stock actual: {selectedProduct.stock} unidades</Text>
+            </Stack>
+          </Paper>
+        )}
+        <NumberInput
+          label="Cantidad a agregar"
+          placeholder="Ej: 50"
+          value={quantity ?? undefined}
+          onChange={(value) => {
+            if (value === "" || value === null) {
+              setQuantity(undefined);
+              return;
+            }
+            const parsed = typeof value === "number" ? value : Number(value);
+            setQuantity(Number.isFinite(parsed) && parsed > 0 ? parsed : undefined);
+          }}
+          min={1}
+        />
+        <Select
+          label="Motivo"
+          placeholder="Selecciona el motivo"
+          data={[
+            { value: "entrada", label: "Entrada de mercancía" },
+            { value: "devolucion", label: "Devolución de cliente" },
+            { value: "ajuste", label: "Ajuste de inventario" },
+            { value: "otro", label: "Otro" }
+          ]}
+          value={reason}
+          onChange={(val) => setReason(val ?? "")}
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              if (!productId) {
+                notifications.show({
+                  title: "Producto requerido",
+                  message: "Selecciona un producto",
+                  color: "orange"
+                });
+                return;
+              }
+              if (!quantity || quantity <= 0) {
+                notifications.show({
+                  title: "Cantidad inválida",
+                  message: "Ingresa una cantidad válida",
+                  color: "orange"
+                });
+                return;
+              }
+              if (!reason) {
+                notifications.show({
+                  title: "Motivo requerido",
+                  message: "Selecciona el motivo",
+                  color: "orange"
+                });
+                return;
+              }
+              onConfirm(productId, quantity, reason);
+            }}
+            leftSection={<Plus size={18} />}
+          >
+            Agregar stock
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+};
+
+interface EditProductModalProps {
+  opened: boolean;
+  onClose: () => void;
+  product: Product | null;
+  categories: string[];
+  onSave: (productId: string, updates: Partial<Product>) => void;
+}
+
+const EditProductModal = ({ opened, onClose, product, categories, onSave }: EditProductModalProps) => {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [barcode, setBarcode] = useState("");
+  const [price, setPrice] = useState<number | undefined>(undefined);
+  const [stock, setStock] = useState<number | undefined>(undefined);
+  const [minStock, setMinStock] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (opened && product) {
+      setName(product.name);
+      setCategory(product.category);
+      setBarcode(product.barcode ?? "");
+      setPrice(product.price);
+      setStock(product.stock);
+      setMinStock(product.minStock);
+    }
+  }, [opened, product]);
+
+  if (!opened || !product) return null;
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Editar producto" centered size="lg">
+      <Stack gap="lg">
+        <TextInput
+          label="Nombre"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+        />
+        <Autocomplete
+          label="Categoría"
+          data={categories}
+          value={category}
+          onChange={setCategory}
+        />
+        <TextInput
+          label="Código de barras"
+          value={barcode}
+          onChange={(e) => setBarcode(e.currentTarget.value)}
+        />
+        <NumberInput
+          label="Precio"
+          value={price ?? undefined}
+          onChange={(value) => {
+            if (value === "" || value === null) {
+              setPrice(undefined);
+              return;
+            }
+            const parsed = typeof value === "number" ? value : Number(value);
+            setPrice(Number.isFinite(parsed) ? parsed : undefined);
+          }}
+          thousandSeparator="."
+          decimalSeparator=","
+          min={0}
+        />
+        <Grid gutter="md">
+          <Grid.Col span={6}>
+            <NumberInput
+              label="Stock actual"
+              value={stock ?? undefined}
+              onChange={(value) => {
+                if (value === "" || value === null) {
+                  setStock(undefined);
+                  return;
+                }
+                const parsed = typeof value === "number" ? value : Number(value);
+                setStock(Number.isFinite(parsed) ? parsed : undefined);
+              }}
+              min={0}
+            />
+          </Grid.Col>
+          <Grid.Col span={6}>
+            <NumberInput
+              label="Stock mínimo"
+              value={minStock ?? undefined}
+              onChange={(value) => {
+                if (value === "" || value === null) {
+                  setMinStock(undefined);
+                  return;
+                }
+                const parsed = typeof value === "number" ? value : Number(value);
+                setMinStock(Number.isFinite(parsed) ? parsed : undefined);
+              }}
+              min={0}
+            />
+          </Grid.Col>
+        </Grid>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              if (!name.trim()) {
+                notifications.show({
+                  title: "Nombre requerido",
+                  message: "Ingresa el nombre del producto",
+                  color: "orange"
+                });
+                return;
+              }
+              if (!category.trim()) {
+                notifications.show({
+                  title: "Categoría requerida",
+                  message: "Ingresa la categoría",
+                  color: "orange"
+                });
+                return;
+              }
+              if (price === undefined || price <= 0) {
+                notifications.show({
+                  title: "Precio inválido",
+                  message: "Ingresa un precio válido",
+                  color: "orange"
+                });
+                return;
+              }
+              onSave(product.id, {
+                name: name.trim(),
+                category: category.trim(),
+                barcode: barcode.trim() || null,
+                price,
+                stock: stock ?? 0,
+                minStock: minStock ?? 5
+              });
+            }}
+            leftSection={<Edit size={18} />}
+          >
+            Guardar cambios
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+};
+
 interface ReturnDrawerProps {
   opened: boolean;
   sales: Sale[];
@@ -1067,6 +1329,15 @@ const App = () => {
   const [fiadoModalMode, setFiadoModalMode] = useState<"abono" | "total">("abono");
 
   const [clientModalOpened, clientModalHandlers] = useDisclosure(false);
+
+  // Inventory states
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string | null>(null);
+  const [inventoryStockFilter, setInventoryStockFilter] = useState<"all" | "low" | "out">("all");
+  const [addStockModalOpened, addStockModalHandlers] = useDisclosure(false);
+  const [editProductModalOpened, editProductModalHandlers] = useDisclosure(false);
+  const [selectedProductForStock, setSelectedProductForStock] = useState<string | null>(null);
+  const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
 
   const [reportFilters, setReportFilters] = useState<ReportFilters>({ range: "today" });
   const [now, setNow] = useState(dayjs());
@@ -1486,6 +1757,73 @@ const App = () => {
       color: "teal"
     });
     await queryClient.invalidateQueries({ queryKey: ["products"] });
+  };
+
+  const handleAddStock = async (productId: string, quantity: number, reason: string) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+
+    const newStock = product.stock + quantity;
+    const { error } = await supabase
+      .from("elianamaipu_products")
+      .update({ stock: newStock })
+      .eq("id", productId);
+
+    if (error) {
+      notifications.show({
+        title: "No se pudo actualizar el stock",
+        message: error.message,
+        color: "red"
+      });
+      return;
+    }
+
+    notifications.show({
+      title: "Stock actualizado",
+      message: `${product.name}: +${quantity} unidades (${reason})`,
+      color: "teal"
+    });
+
+    await queryClient.invalidateQueries({ queryKey: ["products"] });
+    addStockModalHandlers.close();
+    setSelectedProductForStock(null);
+  };
+
+  const handleEditProduct = async (productId: string, updates: Partial<ProductInput>) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+
+    const payload: any = {};
+    if (updates.name !== undefined) payload.name = updates.name;
+    if (updates.category !== undefined) payload.category = updates.category;
+    if (updates.barcode !== undefined) payload.barcode = updates.barcode;
+    if (updates.price !== undefined) payload.price = updates.price;
+    if (updates.stock !== undefined) payload.stock = updates.stock;
+    if (updates.minStock !== undefined) payload.min_stock = updates.minStock;
+
+    const { error } = await supabase
+      .from("elianamaipu_products")
+      .update(payload)
+      .eq("id", productId);
+
+    if (error) {
+      notifications.show({
+        title: "No se pudo actualizar el producto",
+        message: error.message,
+        color: "red"
+      });
+      return;
+    }
+
+    notifications.show({
+      title: "Producto actualizado",
+      message: `${updates.name ?? product.name} se actualizó correctamente.`,
+      color: "teal"
+    });
+
+    await queryClient.invalidateQueries({ queryKey: ["products"] });
+    editProductModalHandlers.close();
+    setSelectedProductForEdit(null);
   };
 
   const handleRegisterReturn = async () => {
@@ -2420,26 +2758,28 @@ const App = () => {
               </Stack>
             )}
             {activeTab === "inventory" && (
-              <Stack gap="xl">
-                <Card withBorder radius="lg">
-                  <Stack gap="lg">
-                    <Group justify="space-between">
-                      <Title order={3}>Control de inventario</Title>
-                      <Button leftSection={<BoxIcon size={18} />} onClick={() => productQuery.refetch()}>
-                        Sincronizar con Supabase
-                      </Button>
-                    </Group>
-                    <Grid gutter="xl">
-                      <Grid.Col span={{ base: 12, md: 5 }}>
-                        <ProductForm categories={Array.from(new Set(products.map((product) => product.category))).sort()} onSubmit={handleCreateProduct} />
-                      </Grid.Col>
-                      <Grid.Col span={{ base: 12, md: 7 }}>
-                        <InventoryTable products={products} />
-                      </Grid.Col>
-                    </Grid>
-                  </Stack>
-                </Card>
-              </Stack>
+              <InventoryView
+                products={products}
+                search={inventorySearch}
+                onSearchChange={setInventorySearch}
+                categoryFilter={inventoryCategoryFilter}
+                onCategoryFilterChange={setInventoryCategoryFilter}
+                stockFilter={inventoryStockFilter}
+                onStockFilterChange={setInventoryStockFilter}
+                onRefresh={() => productQuery.refetch()}
+                onNewProduct={() => {
+                  setSelectedProductForEdit(null);
+                  editProductModalHandlers.open();
+                }}
+                onAddStock={(productId) => {
+                  setSelectedProductForStock(productId);
+                  addStockModalHandlers.open();
+                }}
+                onEditProduct={(product) => {
+                  setSelectedProductForEdit(product);
+                  editProductModalHandlers.open();
+                }}
+              />
             )}
             {activeTab === "fiados" && (
               <FiadosView
@@ -2544,6 +2884,22 @@ const App = () => {
         onCreateClient={handleCreateClient}
       />
 
+      <AddStockModal
+        opened={addStockModalOpened}
+        onClose={addStockModalHandlers.close}
+        products={products}
+        selectedProductId={selectedProductForStock}
+        onConfirm={handleAddStock}
+      />
+
+      <EditProductModal
+        opened={editProductModalOpened}
+        onClose={editProductModalHandlers.close}
+        product={selectedProductForEdit}
+        categories={Array.from(new Set(products.map((p) => p.category))).sort()}
+        onSave={handleEditProduct}
+      />
+
       <ReturnDrawer
         opened={returnDrawerOpened}
         onClose={returnDrawerHandlers.close}
@@ -2590,6 +2946,34 @@ const App = () => {
           fiadoModalHandlers.close();
         }}
       />
+
+      <AddStockModal
+        opened={addStockModalOpened}
+        onClose={() => {
+          addStockModalHandlers.close();
+          setSelectedProductForStock(null);
+        }}
+        products={products}
+        selectedProductId={selectedProductForStock}
+        onConfirm={handleAddStock}
+      />
+
+      <EditProductModal
+        opened={editProductModalOpened}
+        onClose={() => {
+          editProductModalHandlers.close();
+          setSelectedProductForEdit(null);
+        }}
+        product={selectedProductForEdit}
+        categories={Array.from(new Set(products.map((p) => p.category))).sort()}
+        onSave={(productId, updates) => {
+          if (productId) {
+            handleEditProduct(productId, updates);
+          } else {
+            handleCreateProduct(updates as ProductInput);
+          }
+        }}
+      />
     </AppShell>
   );
 };
@@ -2603,166 +2987,338 @@ type ProductInput = {
   minStock: number;
 };
 
-interface ProductFormProps {
-  categories: string[];
-  onSubmit: (product: ProductInput) => void;
+// ================== INVENTORY COMPONENTS ==================
+
+interface InventoryViewProps {
+  products: Product[];
+  search: string;
+  onSearchChange: (value: string) => void;
+  categoryFilter: string | null;
+  onCategoryFilterChange: (value: string | null) => void;
+  stockFilter: "all" | "low" | "out";
+  onStockFilterChange: (value: "all" | "low" | "out") => void;
+  onRefresh: () => void;
+  onNewProduct: () => void;
+  onAddStock: (productId: string) => void;
+  onEditProduct: (product: Product) => void;
 }
 
-const ProductForm = ({ categories, onSubmit }: ProductFormProps) => {
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
-  const [barcode, setBarcode] = useState("");
-  const [price, setPrice] = useState<number | undefined>(undefined);
-  const [stock, setStock] = useState<number | undefined>(undefined);
-  const [minStock, setMinStock] = useState<number | undefined>(5);
+const InventoryView = ({
+  products,
+  search,
+  onSearchChange,
+  categoryFilter,
+  onCategoryFilterChange,
+  stockFilter,
+  onStockFilterChange,
+  onRefresh,
+  onNewProduct,
+  onAddStock,
+  onEditProduct
+}: InventoryViewProps) => {
+  const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category))).sort(), [products]);
 
-  const handleSubmit = () => {
-    const trimmedName = name.trim();
-    const trimmedCategory = category.trim();
-    const priceValue = typeof price === "number" && Number.isFinite(price) ? price : undefined;
+  const filteredProducts = useMemo(() => {
+    let filtered = products;
 
-    if (!trimmedName || !trimmedCategory || priceValue === undefined || priceValue <= 0) {
-      notifications.show({
-        title: "Datos incompletos",
-        message: "Nombre, categoría y precio son obligatorios.",
-        color: "orange"
-      });
-      return;
+    // Búsqueda
+    if (search.trim()) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchLower) ||
+          p.category.toLowerCase().includes(searchLower) ||
+          p.barcode?.toLowerCase().includes(searchLower)
+      );
     }
-    onSubmit({
-      name: trimmedName,
-      category: trimmedCategory,
-      barcode: barcode.trim() || null,
-      price: priceValue,
-      stock: (typeof stock === "number" && Number.isFinite(stock) ? stock : undefined) ?? 0,
-      minStock: (typeof minStock === "number" && Number.isFinite(minStock) ? minStock : undefined) ?? 5
-    });
-    setName("");
-    setCategory("");
-    setBarcode("");
-    setPrice(undefined);
-    setStock(undefined);
-    setMinStock(5);
-  };
+
+    // Filtro categoría
+    if (categoryFilter) {
+      filtered = filtered.filter((p) => p.category === categoryFilter);
+    }
+
+    // Filtro stock
+    if (stockFilter === "low") {
+      filtered = filtered.filter((p) => p.stock <= p.minStock && p.stock > 0);
+    } else if (stockFilter === "out") {
+      filtered = filtered.filter((p) => p.stock === 0);
+    }
+
+    return filtered;
+  }, [products, search, categoryFilter, stockFilter]);
+
+  const totalProducts = products.length;
+  const totalValue = useMemo(() => products.reduce((acc, p) => acc + p.price * p.stock, 0), [products]);
+  const lowStockCount = useMemo(() => products.filter((p) => p.stock <= p.minStock && p.stock > 0).length, [products]);
+  const outStockCount = useMemo(() => products.filter((p) => p.stock === 0).length, [products]);
 
   return (
-    <Stack gap="md">
-      <Title order={4}>Registrar nuevo producto</Title>
-      <TextInput
-        label="Nombre"
-        placeholder="Ej: Yogurt natural 1L"
-        value={name}
-        onChange={(event) => setName(event.currentTarget.value)}
-      />
-      <Autocomplete
-        label="Categoría"
-        placeholder="Selecciona o escribe"
-        data={categories}
-        value={category}
-        onChange={setCategory}
-      />
-      <TextInput
-        label="Código de barras"
-        placeholder="Opcional"
-        value={barcode}
-        onChange={(event) => setBarcode(event.currentTarget.value)}
-      />
-      <NumberInput
-        label="Precio"
-        placeholder="CLP"
-        thousandSeparator="."
-        decimalSeparator=","
-        value={price ?? undefined}
-        min={0}
-        onChange={(value) => {
-          if (value === "" || value === null) {
-            setPrice(undefined);
-            return;
-          }
-          const parsed = typeof value === "number" ? value : Number(value);
-          setPrice(Number.isFinite(parsed) ? parsed : undefined);
-        }}
-      />
-      <NumberInput
-        label="Stock inicial"
-        value={stock ?? undefined}
-        min={0}
-        onChange={(value) => {
-          if (value === "" || value === null) {
-            setStock(undefined);
-            return;
-          }
-          const parsed = typeof value === "number" ? value : Number(value);
-          setStock(Number.isFinite(parsed) ? parsed : undefined);
-        }}
-      />
-      <NumberInput
-        label="Stock mínimo"
-        value={minStock ?? undefined}
-        min={0}
-        onChange={(value) => {
-          if (value === "" || value === null) {
-            setMinStock(undefined);
-            return;
-          }
-          const parsed = typeof value === "number" ? value : Number(value);
-          setMinStock(Number.isFinite(parsed) ? parsed : undefined);
-        }}
-      />
-      <Button leftSection={<BoxIcon size={18} />} onClick={handleSubmit}>
-        Agregar producto
-      </Button>
+    <Stack gap="xl">
+      {/* KPI Cards */}
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg">
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, var(--mantine-color-teal-6), var(--mantine-color-teal-4))"
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Total Productos
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <Package size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
+              {totalProducts}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              Productos registrados
+            </Text>
+          </Stack>
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, var(--mantine-color-indigo-6), var(--mantine-color-indigo-4))"
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Valor Total
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <Coins size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
+              {formatCurrency(totalValue)}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              Inventario valorizado
+            </Text>
+          </Stack>
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, var(--mantine-color-orange-6), var(--mantine-color-orange-4))"
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Stock Bajo
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <AlertTriangle size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
+              {lowStockCount}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              Productos con stock bajo
+            </Text>
+          </Stack>
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, var(--mantine-color-red-6), var(--mantine-color-red-4))"
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Sin Stock
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <X size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
+              {outStockCount}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              Productos agotados
+            </Text>
+          </Stack>
+        </Card>
+      </SimpleGrid>
+
+      {/* Toolbar */}
+      <Card withBorder radius="lg">
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Title order={3}>Control de Inventario</Title>
+            <Group gap="sm">
+              <Button
+                variant="gradient"
+                gradient={{ from: "teal", to: "cyan", deg: 90 }}
+                leftSection={<Plus size={18} />}
+                onClick={onNewProduct}
+              >
+                Nuevo Producto
+              </Button>
+              <Button variant="light" color="indigo" leftSection={<RefreshCcw size={18} />} onClick={onRefresh}>
+                Sincronizar
+              </Button>
+            </Group>
+          </Group>
+
+          <Grid gutter="md">
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <TextInput
+                placeholder="Buscar por nombre, categoría o código..."
+                leftSection={<Search size={18} />}
+                value={search}
+                onChange={(e) => onSearchChange(e.currentTarget.value)}
+                rightSection={
+                  search ? (
+                    <ActionIcon variant="subtle" color="gray" onClick={() => onSearchChange("")}>
+                      <X size={16} />
+                    </ActionIcon>
+                  ) : null
+                }
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <Select
+                placeholder="Todas las categorías"
+                leftSection={<Filter size={18} />}
+                data={categories}
+                value={categoryFilter}
+                onChange={onCategoryFilterChange}
+                clearable
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+              <Select
+                placeholder="Estado de stock"
+                data={[
+                  { value: "all", label: "Todos" },
+                  { value: "low", label: "Stock bajo" },
+                  { value: "out", label: "Sin stock" }
+                ]}
+                value={stockFilter}
+                onChange={(value) => onStockFilterChange(value as "all" | "low" | "out")}
+              />
+            </Grid.Col>
+          </Grid>
+        </Stack>
+      </Card>
+
+      {/* Tabla de productos */}
+      <Card withBorder radius="lg">
+        <ScrollArea h={500}>
+          <Table highlightOnHover striped>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Nombre</Table.Th>
+                <Table.Th>Categoría</Table.Th>
+                <Table.Th>Código</Table.Th>
+                <Table.Th>Precio</Table.Th>
+                <Table.Th>Stock Actual</Table.Th>
+                <Table.Th>Stock Mínimo</Table.Th>
+                <Table.Th>Estado</Table.Th>
+                <Table.Th>Acciones</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {filteredProducts.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={8}>
+                    <Text ta="center" c="dimmed" py="xl">
+                      No se encontraron productos
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                filteredProducts.map((product) => {
+                  let statusColor = "teal";
+                  let statusLabel = "Normal";
+
+                  if (product.stock === 0) {
+                    statusColor = "red";
+                    statusLabel = "Sin stock";
+                  } else if (product.stock <= product.minStock) {
+                    statusColor = "orange";
+                    statusLabel = "Stock bajo";
+                  }
+
+                  return (
+                    <Table.Tr key={product.id}>
+                      <Table.Td>
+                        <Text fw={500}>{product.name}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" color="indigo">
+                          {product.category}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm" c="dimmed">
+                          {product.barcode || "-"}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fw={600}>{formatCurrency(product.price)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fw={600}>{product.stock}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text c="dimmed">{product.minStock}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge color={statusColor} variant="light">
+                          {statusLabel}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap="xs">
+                          <Tooltip label="Agregar stock">
+                            <ActionIcon
+                              variant="light"
+                              color="teal"
+                              onClick={() => onAddStock(product.id)}
+                            >
+                              <Plus size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Editar producto">
+                            <ActionIcon
+                              variant="light"
+                              color="indigo"
+                              onClick={() => onEditProduct(product)}
+                            >
+                              <Edit size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })
+              )}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
+      </Card>
     </Stack>
   );
 };
-
-const InventoryTable = ({ products }: { products: Product[] }) => (
-  <Card withBorder radius="lg">
-    <Stack gap="md">
-      <Title order={4}>Inventario completo</Title>
-      <ScrollArea h={420}>
-        <Table highlightOnHover striped>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Producto</Table.Th>
-              <Table.Th>Categoría</Table.Th>
-              <Table.Th>Stock</Table.Th>
-              <Table.Th>Mínimo</Table.Th>
-              <Table.Th>Cobertura</Table.Th>
-              <Table.Th>Precio</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {products.map((product) => {
-              const coverage = Math.min(
-                100,
-                Math.round((product.stock / Math.max(product.minStock || 1, 1)) * 100)
-              );
-              const statusColor = product.stock <= product.minStock ? "orange" : "teal";
-              return (
-                <Table.Tr key={product.id}>
-                  <Table.Td>{product.name}</Table.Td>
-                  <Table.Td>{product.category}</Table.Td>
-                  <Table.Td>{product.stock}</Table.Td>
-                  <Table.Td>{product.minStock}</Table.Td>
-                  <Table.Td>
-                    <Stack gap={4}>
-                      <Progress value={coverage} color={statusColor} radius="xl" />
-                      <Text size="xs" c="dimmed">
-                        {coverage}% cobertura
-                      </Text>
-                    </Stack>
-                  </Table.Td>
-                  <Table.Td>{formatCurrency(product.price)}</Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
-      </ScrollArea>
-    </Stack>
-  </Card>
-);
 
 interface DashboardViewProps {
   products: Product[];
