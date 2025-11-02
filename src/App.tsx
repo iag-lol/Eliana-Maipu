@@ -5,6 +5,7 @@ import {
   AppShell,
   Autocomplete,
   Badge,
+  Box,
   Button,
   Card,
   Divider,
@@ -2417,7 +2418,7 @@ const App = () => {
         </Stack>
       </AppShell.Navbar>
 
-      <AppShell.Main>
+      <AppShell.Main style={{ paddingBottom: "180px" }}>
         <Notifications position="top-right" />
         {!currentTab ? null : customerDisplay && activeTab === "pos" ? (
           <CustomerDisplay
@@ -3870,34 +3871,85 @@ const FiadosView = ({ clients, onAuthorize, onOpenModal, onOpenClientModal }: Fi
               </Button>
             </Group>
           </Group>
-          <ScrollArea h={460}>
-            <Table highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Cliente</Table.Th>
-                  <Table.Th>Estado</Table.Th>
-                  <Table.Th>Límite</Table.Th>
-                  <Table.Th>Saldo</Table.Th>
-                  <Table.Th>Acciones</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
+
+          {/* Vista de tabla para desktop */}
+          <Box visibleFrom="md">
+            <ScrollArea h={460}>
+              <Table highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Cliente</Table.Th>
+                    <Table.Th>Estado</Table.Th>
+                    <Table.Th>Límite</Table.Th>
+                    <Table.Th>Saldo</Table.Th>
+                    <Table.Th>Acciones</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {clients.map((client) => (
+                    <Table.Tr key={client.id}>
+                      <Table.Td>{client.name}</Table.Td>
+                      <Table.Td>
+                        <Badge color={client.authorized ? "teal" : "red"} variant="light">
+                          {client.authorized ? "Autorizado" : "Bloqueado"}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>{formatCurrency(client.limit)}</Table.Td>
+                      <Table.Td>
+                        <Text fw={600} c={client.balance > 0 ? "red" : "teal"}>
+                          {formatCurrency(client.balance)}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap="xs">
+                          <Button
+                            size="xs"
+                            variant="default"
+                            onClick={() => onAuthorize(client.id, !client.authorized)}
+                          >
+                            {client.authorized ? "Bloquear" : "Autorizar"}
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="light"
+                            leftSection={<Coins size={16} />}
+                            onClick={() => onOpenModal(client.id, "abono")}
+                            disabled={client.balance === 0}
+                          >
+                            Registrar abono
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            leftSection={<PiggyBank size={16} />}
+                            onClick={() => onOpenModal(client.id, "total")}
+                            disabled={client.balance === 0}
+                          >
+                            Pago total
+                          </Button>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          </Box>
+
+          {/* Vista de tarjetas para mobile */}
+          <Box hiddenFrom="md">
+            <ScrollArea h={460}>
+              <Stack gap="md">
                 {clients.map((client) => (
-                  <Table.Tr key={client.id}>
-                    <Table.Td>{client.name}</Table.Td>
-                    <Table.Td>
-                      <Badge color={client.authorized ? "teal" : "red"} variant="light">
-                        {client.authorized ? "Autorizado" : "Bloqueado"}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>{formatCurrency(client.limit)}</Table.Td>
-                    <Table.Td>
-                      <Text fw={600} c={client.balance > 0 ? "red" : "teal"}>
-                        {formatCurrency(client.balance)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
+                  <Card key={client.id} withBorder radius="lg" shadow="sm">
+                    <Stack gap="md">
+                      <Group justify="space-between" align="flex-start">
+                        <Stack gap={4}>
+                          <Text fw={700} size="lg">{client.name}</Text>
+                          <Badge color={client.authorized ? "teal" : "red"} variant="light">
+                            {client.authorized ? "Autorizado" : "Bloqueado"}
+                          </Badge>
+                        </Stack>
                         <Button
                           size="xs"
                           variant="default"
@@ -3905,31 +3957,52 @@ const FiadosView = ({ clients, onAuthorize, onOpenModal, onOpenClientModal }: Fi
                         >
                           {client.authorized ? "Bloquear" : "Autorizar"}
                         </Button>
-                        <Button
-                          size="xs"
-                          variant="light"
-                          leftSection={<Coins size={16} />}
-                          onClick={() => onOpenModal(client.id, "abono")}
-                          disabled={client.balance === 0}
-                        >
-                          Registrar abono
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="subtle"
-                          leftSection={<PiggyBank size={16} />}
-                          onClick={() => onOpenModal(client.id, "total")}
-                          disabled={client.balance === 0}
-                        >
-                          Pago total
-                        </Button>
                       </Group>
-                    </Table.Td>
-                  </Table.Tr>
+
+                      <Divider />
+
+                      <Group justify="space-between">
+                        <Text size="sm" c="dimmed">Límite de crédito</Text>
+                        <Text fw={600}>{formatCurrency(client.limit)}</Text>
+                      </Group>
+
+                      <Group justify="space-between">
+                        <Text size="sm" c="dimmed">Saldo actual</Text>
+                        <Text fw={700} size="lg" c={client.balance > 0 ? "red" : "teal"}>
+                          {formatCurrency(client.balance)}
+                        </Text>
+                      </Group>
+
+                      {client.balance > 0 && (
+                        <>
+                          <Divider />
+                          <Group grow>
+                            <Button
+                              size="sm"
+                              variant="light"
+                              leftSection={<Coins size={16} />}
+                              onClick={() => onOpenModal(client.id, "abono")}
+                            >
+                              Abono
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="light"
+                              color="teal"
+                              leftSection={<PiggyBank size={16} />}
+                              onClick={() => onOpenModal(client.id, "total")}
+                            >
+                              Pago total
+                            </Button>
+                          </Group>
+                        </>
+                      )}
+                    </Stack>
+                  </Card>
                 ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
+              </Stack>
+            </ScrollArea>
+          </Box>
         </Stack>
       </Card>
 
