@@ -212,25 +212,23 @@ const mapProductRow = (row: any): Product => ({
   updated_at: row.updated_at
 });
 
-const mapClientRow = (row: any): Client => {
-  const toNumber = (value: unknown) => {
-    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-    if (typeof value === "string") {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-    return 0;
-  };
-
-  return {
-    id: row.id,
-    name: row.name,
-    authorized: row.authorized ?? false,
-    balance: toNumber(row.balance),
-    limit: toNumber(row.credit_limit ?? row.limit),
-    updated_at: row.updated_at
-  };
+const toNumber = (value: unknown): number => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 };
+
+const mapClientRow = (row: any): Client => ({
+  id: row.id,
+  name: row.name,
+  authorized: row.authorized ?? false,
+  balance: toNumber(row.balance),
+  limit: toNumber(row.credit_limit ?? row.limit),
+  updated_at: row.updated_at
+});
 
 const mapSaleRow = (row: any): Sale => ({
   id: row.id,
