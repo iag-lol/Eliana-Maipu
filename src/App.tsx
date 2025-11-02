@@ -273,6 +273,7 @@ const mapShiftRow = (row: any): Shift => ({
   start: row.start_time ?? row.start ?? row.created_at,
   end: row.end_time ?? row.end ?? null,
   status: row.status ?? (row.end_time ? "closed" : "open"),
+  initial_cash: row.initial_cash ?? null,
   cash_expected: row.cash_expected ?? null,
   cash_counted: row.cash_counted ?? null,
   difference: row.difference ?? null,
