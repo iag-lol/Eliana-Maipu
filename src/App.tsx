@@ -1652,7 +1652,7 @@ const App = () => {
       name,
       authorized,
       balance: 0,
-      limit
+      "limit": limit
     });
 
     if (error) {
