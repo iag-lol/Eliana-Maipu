@@ -17,6 +17,7 @@ import {
   Select,
   SimpleGrid,
   Stack,
+  Switch,
   Table,
   Text,
   TextInput,
@@ -66,6 +67,7 @@ import {
   ShoppingCart,
   Sun,
   TrendingUp,
+  UserPlus,
   UsersRound,
   Wallet,
   Waypoints
@@ -508,7 +510,7 @@ interface ShiftModalProps {
   opened: boolean;
   mode: "open" | "close";
   onClose: () => void;
-  onOpenShift: (payload: { seller: string; type: ShiftType }) => void;
+  onOpenShift: (payload: { seller: string; type: ShiftType; initialCash: number }) => void;
   onCloseShift: (payload: { cashCounted: number }) => void;
   summary: ShiftSummary & { cashExpected: number };
 }
@@ -516,12 +518,14 @@ interface ShiftModalProps {
 const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary }: ShiftModalProps) => {
   const [seller, setSeller] = useState("");
   const [shiftType, setShiftType] = useState<ShiftType>("dia");
+  const [initialCash, setInitialCash] = useState<number | undefined>(undefined);
   const [cashCounted, setCashCounted] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!opened) {
       setSeller("");
       setShiftType("dia");
+      setInitialCash(undefined);
       setCashCounted(undefined);
     }
   }, [opened]);
@@ -545,6 +549,22 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
               value={shiftType}
               onChange={(value) => setShiftType((value as ShiftType) ?? "dia")}
             />
+            <NumberInput
+              label="Efectivo inicial"
+              placeholder="Ej: 50000"
+              description="Monto de efectivo con el que inicia el turno"
+              value={initialCash ?? undefined}
+              onChange={(value) => {
+                if (value === "" || value === null) {
+                  setInitialCash(undefined);
+                  return;
+                }
+                const parsed = typeof value === "number" ? value : Number(value);
+                setInitialCash(Number.isFinite(parsed) ? parsed : undefined);
+              }}
+              min={0}
+              thousandSeparator="."
+            />
             <Badge color="teal" variant="light">
               Mantén el control en tiempo real del efectivo durante el turno.
             </Badge>
@@ -562,7 +582,16 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
                     });
                     return;
                   }
-                  onOpenShift({ seller: seller.trim(), type: shiftType });
+                  const initialCashValue = typeof initialCash === "number" && Number.isFinite(initialCash) ? initialCash : undefined;
+                  if (initialCashValue === undefined) {
+                    notifications.show({
+                      title: "Campos incompletos",
+                      message: "Ingresa el efectivo inicial del turno.",
+                      color: "orange"
+                    });
+                    return;
+                  }
+                  onOpenShift({ seller: seller.trim(), type: shiftType, initialCash: initialCashValue });
                 }}
                 leftSection={<Clock3 size={18} />}
               >
@@ -652,6 +681,93 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
   );
 };
 
+interface ClientModalProps {
+  opened: boolean;
+  onClose: () => void;
+  onCreateClient: (payload: { name: string; limit: number; authorized: boolean }) => void;
+}
+
+const ClientModal = ({ opened, onClose, onCreateClient }: ClientModalProps) => {
+  const [name, setName] = useState("");
+  const [limit, setLimit] = useState<number | undefined>(undefined);
+  const [authorized, setAuthorized] = useState(true);
+
+  useEffect(() => {
+    if (!opened) {
+      setName("");
+      setLimit(undefined);
+      setAuthorized(true);
+    }
+  }, [opened]);
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Nuevo cliente fiado" centered size="md">
+      <Stack gap="lg">
+        <TextInput
+          label="Nombre del cliente"
+          placeholder="Ej: Juan Pérez"
+          value={name}
+          onChange={(event) => setName(event.currentTarget.value)}
+          required
+        />
+        <NumberInput
+          label="Límite de crédito"
+          placeholder="Ej: 100000"
+          description="Monto máximo que el cliente puede deber"
+          value={limit ?? undefined}
+          onChange={(value) => {
+            if (value === "" || value === null) {
+              setLimit(undefined);
+              return;
+            }
+            const parsed = typeof value === "number" ? value : Number(value);
+            setLimit(Number.isFinite(parsed) ? parsed : undefined);
+          }}
+          min={0}
+          thousandSeparator="."
+          required
+        />
+        <Switch
+          label="Autorizar al cliente"
+          description="Si está autorizado, podrá realizar compras a crédito inmediatamente"
+          checked={authorized}
+          onChange={(event) => setAuthorized(event.currentTarget.checked)}
+        />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              if (!name.trim()) {
+                notifications.show({
+                  title: "Campos incompletos",
+                  message: "Ingresa el nombre del cliente.",
+                  color: "orange"
+                });
+                return;
+              }
+              const limitValue = typeof limit === "number" && Number.isFinite(limit) ? limit : undefined;
+              if (limitValue === undefined) {
+                notifications.show({
+                  title: "Campos incompletos",
+                  message: "Ingresa el límite de crédito.",
+                  color: "orange"
+                });
+                return;
+              }
+              onCreateClient({ name: name.trim(), limit: limitValue, authorized });
+            }}
+            leftSection={<UserPlus size={18} />}
+          >
+            Crear cliente
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+};
+
 interface ReturnDrawerProps {
   opened: boolean;
   sales: Sale[];
@@ -662,6 +778,8 @@ interface ReturnDrawerProps {
   onChangeItem: (itemId: string, quantity: number) => void;
   reason: string;
   onChangeReason: (value: string) => void;
+  refundMethod: "cash" | "card" | "product";
+  onChangeRefundMethod: (value: "cash" | "card" | "product") => void;
   onConfirm: () => void;
 }
 
@@ -675,6 +793,8 @@ const ReturnDrawer = ({
   onChangeItem,
   reason,
   onChangeReason,
+  refundMethod,
+  onChangeRefundMethod,
   onConfirm
 }: ReturnDrawerProps) => {
   const selectedSale = sales.find((sale) => sale.id === value);
@@ -726,6 +846,17 @@ const ReturnDrawer = ({
               placeholder="Producto en mal estado, vencido, error de cobro..."
               value={reason}
               onChange={(event) => onChangeReason(event.currentTarget.value)}
+            />
+            <Select
+              label="Método de devolución"
+              description="Selecciona cómo se devolverá el dinero al cliente"
+              value={refundMethod}
+              onChange={(val) => onChangeRefundMethod(val as "cash" | "card" | "product")}
+              data={[
+                { value: "cash", label: "Efectivo" },
+                { value: "card", label: "Tarjeta" },
+                { value: "product", label: "Cambio por producto" }
+              ]}
             />
             <Paper withBorder p="md" radius="md">
               <Group justify="space-between">
@@ -919,12 +1050,15 @@ const App = () => {
   const [returnSaleId, setReturnSaleId] = useState<string | null>(null);
   const [returnItems, setReturnItems] = useState<Record<string, number>>({});
   const [returnReason, setReturnReason] = useState("");
+  const [returnRefundMethod, setReturnRefundMethod] = useState<"cash" | "card" | "product">("cash");
 
   const [paymentEditSaleId, setPaymentEditSaleId] = useState<string | null>(null);
 
   const [fiadoModalOpened, fiadoModalHandlers] = useDisclosure(false);
   const [fiadoModalClientId, setFiadoModalClientId] = useState<string | null>(null);
   const [fiadoModalMode, setFiadoModalMode] = useState<"abono" | "total">("abono");
+
+  const [clientModalOpened, clientModalHandlers] = useDisclosure(false);
 
   const [reportFilters, setReportFilters] = useState<ReportFilters>({ range: "today" });
   const [now, setNow] = useState(dayjs());
@@ -1253,12 +1387,13 @@ const App = () => {
     ]);
   };
 
-  const handleOpenShift = async ({ seller, type }: { seller: string; type: ShiftType }) => {
+  const handleOpenShift = async ({ seller, type, initialCash }: { seller: string; type: ShiftType; initialCash: number }) => {
     const { error } = await supabase.from("elianamaipu_shifts").insert({
       seller,
       type,
       start_time: new Date().toISOString(),
-      status: "open"
+      status: "open",
+      initial_cash: initialCash
     });
 
     if (error) {
@@ -1272,7 +1407,7 @@ const App = () => {
 
     notifications.show({
       title: "Turno iniciado",
-      message: `Turno ${type === "dia" ? "día" : "noche"} para ${seller}.`,
+      message: `Turno ${type === "dia" ? "día" : "noche"} para ${seller} con ${formatCurrency(initialCash)} inicial.`,
       color: "teal"
     });
     await queryClient.invalidateQueries({ queryKey: ["shifts"] });
@@ -1282,7 +1417,8 @@ const App = () => {
   const handleCloseShift = async ({ cashCounted }: { cashCounted: number }) => {
     if (!activeShift) return;
     const summary = computeShiftSummary(sales, activeShift.id);
-    const cashExpected = summary.byPayment.cash ?? 0;
+    const initialCash = activeShift.initial_cash ?? 0;
+    const cashExpected = initialCash + (summary.byPayment.cash ?? 0);
     const difference = cashCounted - cashExpected;
     const { error } = await supabase
       .from("elianamaipu_shifts")
@@ -1370,12 +1506,17 @@ const App = () => {
       ticket: returnTicket,
       type: "return",
       total: totalReturn,
-      payment_method: sale.paymentMethod,
+      payment_method: returnRefundMethod,
       shift_id: sale.shiftId,
       seller: sale.seller,
       created_at: timestamp,
       items,
-      notes: { reason: returnReason, originalTicket: sale.ticket }
+      notes: {
+        reason: returnReason,
+        originalTicket: sale.ticket,
+        originalPaymentMethod: sale.paymentMethod,
+        refundMethod: returnRefundMethod
+      }
     });
 
     if (error) {
@@ -1396,15 +1537,17 @@ const App = () => {
       )
     );
 
+    const refundMethodLabel = returnRefundMethod === "cash" ? "en efectivo" : returnRefundMethod === "card" ? "por tarjeta" : "por cambio de producto";
     notifications.show({
       title: "Devolución registrada",
-      message: `Se devolvieron ${formatCurrency(totalReturn)} al inventario.`,
+      message: `Se devolvieron ${formatCurrency(totalReturn)} ${refundMethodLabel} al cliente.`,
       color: "teal"
     });
 
     setReturnItems({});
     setReturnSaleId(null);
     setReturnReason("");
+    setReturnRefundMethod("cash");
     returnDrawerHandlers.close();
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["sales"] }),
@@ -1494,6 +1637,32 @@ const App = () => {
       color: "teal"
     });
     await queryClient.invalidateQueries({ queryKey: ["clients"] });
+  };
+
+  const handleCreateClient = async ({ name, limit, authorized }: { name: string; limit: number; authorized: boolean }) => {
+    const { error } = await supabase.from("elianamaipu_clients").insert({
+      name,
+      authorized,
+      balance: 0,
+      limit
+    });
+
+    if (error) {
+      notifications.show({
+        title: "No se pudo crear el cliente",
+        message: error.message,
+        color: "red"
+      });
+      return;
+    }
+
+    notifications.show({
+      title: "Cliente creado",
+      message: `${name} fue agregado exitosamente con límite de ${formatCurrency(limit)}.`,
+      color: "teal"
+    });
+    await queryClient.invalidateQueries({ queryKey: ["clients"] });
+    clientModalHandlers.close();
   };
 
   const filteredSalesForReports = useMemo(() => {
@@ -2265,6 +2434,7 @@ const App = () => {
                   setFiadoModalMode(mode);
                   fiadoModalHandlers.open();
                 }}
+                onOpenClientModal={() => clientModalHandlers.open()}
               />
             )}
             {activeTab === "reports" && (
@@ -2349,7 +2519,13 @@ const App = () => {
         onClose={shiftModalHandlers.close}
         onOpenShift={handleOpenShift}
         onCloseShift={handleCloseShift}
-        summary={{ ...shiftSummary, cashExpected: shiftSummary.byPayment.cash ?? 0 }}
+        summary={{ ...shiftSummary, cashExpected: (activeShift?.initial_cash ?? 0) + (shiftSummary.byPayment.cash ?? 0) }}
+      />
+
+      <ClientModal
+        opened={clientModalOpened}
+        onClose={clientModalHandlers.close}
+        onCreateClient={handleCreateClient}
       />
 
       <ReturnDrawer
@@ -2367,6 +2543,8 @@ const App = () => {
         }
         reason={returnReason}
         onChangeReason={setReturnReason}
+        refundMethod={returnRefundMethod}
+        onChangeRefundMethod={setReturnRefundMethod}
         onConfirm={handleRegisterReturn}
       />
 
@@ -2692,21 +2870,23 @@ const DashboardView = ({
 
   return (
     <Stack gap="lg">
-      <Card withBorder radius="lg" style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.18))" }}>
-        <Group justify="space-between" align="flex-start">
-          <Stack gap={4}>
-            <Text fw={700} fz="lg">
-              Turno activo • {activeShift.seller}
-            </Text>
-            <Text size="sm" c="dimmed">
-              {activeShift.type === "dia" ? "Turno diurno" : "Turno nocturno"} • Apertura {formatDateTime(activeShift.start)}
-            </Text>
-          </Stack>
-          <Badge color="blue" variant="light">
-            {shiftSales.length} movimientos
-          </Badge>
-        </Group>
-      </Card>
+      {activeShift && (
+        <Card withBorder radius="lg" style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.18))" }}>
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4}>
+              <Text fw={700} fz="lg">
+                Turno activo • {activeShift.seller}
+              </Text>
+              <Text size="sm" c="dimmed">
+                {activeShift.type === "dia" ? "Turno diurno" : "Turno nocturno"} • Apertura {formatDateTime(activeShift.start)}
+              </Text>
+            </Stack>
+            <Badge color="blue" variant="light">
+              {shiftSales.length} movimientos
+            </Badge>
+          </Group>
+        </Card>
+      )}
 
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
         <Paper withBorder radius="lg" p="md">
@@ -2957,9 +3137,10 @@ interface FiadosViewProps {
   clients: Client[];
   onAuthorize: (clientId: string, authorized: boolean) => void;
   onOpenModal: (clientId: string, mode: "abono" | "total") => void;
+  onOpenClientModal: () => void;
 }
 
-const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => {
+const FiadosView = ({ clients, onAuthorize, onOpenModal, onOpenClientModal }: FiadosViewProps) => {
   const totalDebt = clients.reduce((acc, client) => acc + client.balance, 0);
   const authorizedCount = clients.filter((client) => client.authorized).length;
   const blockedCount = clients.length - authorizedCount;
@@ -3026,9 +3207,18 @@ const FiadosView = ({ clients, onAuthorize, onOpenModal }: FiadosViewProps) => {
         <Stack gap="md">
           <Group justify="space-between">
             <Title order={3}>Gestión de fiados</Title>
-            <Badge color="violet" variant="light">
-              {authorizedCount} autorizados
-            </Badge>
+            <Group gap="sm">
+              <Badge color="violet" variant="light">
+                {authorizedCount} autorizados
+              </Badge>
+              <Button
+                size="sm"
+                leftSection={<UserPlus size={16} />}
+                onClick={onOpenClientModal}
+              >
+                Nuevo cliente
+              </Button>
+            </Group>
           </Group>
           <ScrollArea h={460}>
             <Table highlightOnHover>

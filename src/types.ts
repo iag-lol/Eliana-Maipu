@@ -69,6 +69,7 @@ export interface Shift {
   start: string;
   end?: string | null;
   status: "open" | "closed";
+  initial_cash?: number | null;
   cash_expected?: number | null;
   cash_counted?: number | null;
   difference?: number | null;
