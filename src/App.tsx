@@ -1570,6 +1570,18 @@ const App = () => {
       });
       return false;
     }
+
+    // VALIDACIÓN CRÍTICA: NO permitir ventas sin turno abierto
+    if (!activeShift) {
+      notifications.show({
+        title: "Turno cerrado",
+        message: "Debes abrir un turno antes de registrar ventas.",
+        color: "red",
+        autoClose: false
+      });
+      return false;
+    }
+
     if (selectedPayment === "cash") {
       const cashValue = typeof cashReceived === "number" && Number.isFinite(cashReceived) ? cashReceived : undefined;
       if (cashValue === undefined || cashValue <= 0) {
@@ -1630,14 +1642,7 @@ const App = () => {
         return false;
       }
     }
-    if (selectedPayment === "staff" && !activeShift) {
-      notifications.show({
-        title: "Turno requerido",
-        message: "Inicia un turno para registrar consumos del personal.",
-        color: "orange"
-      });
-      return false;
-    }
+
     return true;
   };
 
