@@ -626,3 +626,33 @@
 ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
 }
+
+/* ============================================
+   Fix para modales nítidos
+   ============================================ */
+
+/* Deshabilitar blur del overlay y asegurar nitidez del modal */
+[class*="mantine-Modal-overlay"] {
+  backdrop-filter: blur(0px) !important;
+  background-color: rgba(0, 0, 0, 0.55) !important;
+}
+
+/* Asegurar rendering nítido del contenido del modal */
+[class*="mantine-Modal-content"] {
+  transform: translateZ(0) !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  backface-visibility: hidden !important;
+  perspective: 1000px !important;
+}
+
+/* Forzar rendering de alta calidad para inputs dentro de modales */
+[class*="mantine-Modal"] input,
+[class*="mantine-Modal"] textarea,
+[class*="mantine-Modal"] select,
+[class*="mantine-Modal"] label,
+[class*="mantine-Modal"] button {
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: optimizeLegibility !important;
+}
