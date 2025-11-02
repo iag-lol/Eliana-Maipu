@@ -898,7 +898,7 @@ interface EditProductModalProps {
   onClose: () => void;
   product: Product | null;
   categories: string[];
-  onSave: (productId: string, updates: Partial<Product>) => void;
+  onSave: (productId: string | null, updates: Partial<Product>) => void;
 }
 
 const EditProductModal = ({ opened, onClose, product, categories, onSave }: EditProductModalProps) => {
@@ -910,39 +910,59 @@ const EditProductModal = ({ opened, onClose, product, categories, onSave }: Edit
   const [minStock, setMinStock] = useState<number | undefined>(undefined);
 
   useEffect(() => {
-    if (opened && product) {
-      setName(product.name);
-      setCategory(product.category);
-      setBarcode(product.barcode ?? "");
-      setPrice(product.price);
-      setStock(product.stock);
-      setMinStock(product.minStock);
+    if (opened) {
+      if (product) {
+        setName(product.name);
+        setCategory(product.category);
+        setBarcode(product.barcode ?? "");
+        setPrice(product.price);
+        setStock(product.stock);
+        setMinStock(product.minStock);
+      } else {
+        // Resetear campos para nuevo producto
+        setName("");
+        setCategory("");
+        setBarcode("");
+        setPrice(undefined);
+        setStock(0);
+        setMinStock(5);
+      }
     }
   }, [opened, product]);
 
-  if (!opened || !product) return null;
+  if (!opened) return null;
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Editar producto" centered size="lg">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={product ? "Editar producto" : "Nuevo producto"}
+      centered
+      size="lg"
+    >
       <Stack gap="lg">
         <TextInput
           label="Nombre"
+          placeholder="Ej: Yogurt natural 1L"
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
         />
         <Autocomplete
           label="Categoría"
+          placeholder="Selecciona o escribe una categoría"
           data={categories}
           value={category}
           onChange={setCategory}
         />
         <TextInput
           label="Código de barras"
+          placeholder="Opcional"
           value={barcode}
           onChange={(e) => setBarcode(e.currentTarget.value)}
         />
         <NumberInput
           label="Precio"
+          placeholder="CLP"
           value={price ?? undefined}
           onChange={(value) => {
             if (value === "" || value === null) {
@@ -959,7 +979,8 @@ const EditProductModal = ({ opened, onClose, product, categories, onSave }: Edit
         <Grid gutter="md">
           <Grid.Col span={6}>
             <NumberInput
-              label="Stock actual"
+              label="Stock inicial"
+              placeholder="Cantidad en inventario"
               value={stock ?? undefined}
               onChange={(value) => {
                 if (value === "" || value === null) {
@@ -975,6 +996,7 @@ const EditProductModal = ({ opened, onClose, product, categories, onSave }: Edit
           <Grid.Col span={6}>
             <NumberInput
               label="Stock mínimo"
+              placeholder="Cantidad mínima de alerta"
               value={minStock ?? undefined}
               onChange={(value) => {
                 if (value === "" || value === null) {
@@ -1018,7 +1040,7 @@ const EditProductModal = ({ opened, onClose, product, categories, onSave }: Edit
                 });
                 return;
               }
-              onSave(product.id, {
+              onSave(product?.id ?? null, {
                 name: name.trim(),
                 category: category.trim(),
                 barcode: barcode.trim() || null,
@@ -1026,10 +1048,11 @@ const EditProductModal = ({ opened, onClose, product, categories, onSave }: Edit
                 stock: stock ?? 0,
                 minStock: minStock ?? 5
               });
+              onClose();
             }}
-            leftSection={<Edit size={18} />}
+            leftSection={product ? <Edit size={18} /> : <Plus size={18} />}
           >
-            Guardar cambios
+            {product ? "Guardar cambios" : "Crear producto"}
           </Button>
         </Group>
       </Stack>
@@ -2241,6 +2264,19 @@ const App = () => {
                   </Text>
                   <Text fw={700}>{shiftSummary.tickets}</Text>
                 </Group>
+                <Divider />
+                <Group justify="space-between">
+                  <Text size="sm" c="dimmed" fw={600}>
+                    Efectivo en caja
+                  </Text>
+                  <Text fw={700} c="teal">
+                    {formatCurrency((activeShift.initial_cash ?? 0) + (shiftSummary.byPayment.cash ?? 0))}
+                  </Text>
+                </Group>
+                <Text size="xs" c="dimmed" pl="xs">
+                  Inicial: {formatCurrency(activeShift.initial_cash ?? 0)} + Ventas: {formatCurrency(shiftSummary.byPayment.cash ?? 0)}
+                </Text>
+                <Divider />
                 {PAYMENT_ORDER.map((method) => (
                   <Group key={method} justify="space-between">
                     <Text size="xs" c="dimmed">
@@ -2882,22 +2918,6 @@ const App = () => {
         opened={clientModalOpened}
         onClose={clientModalHandlers.close}
         onCreateClient={handleCreateClient}
-      />
-
-      <AddStockModal
-        opened={addStockModalOpened}
-        onClose={addStockModalHandlers.close}
-        products={products}
-        selectedProductId={selectedProductForStock}
-        onConfirm={handleAddStock}
-      />
-
-      <EditProductModal
-        opened={editProductModalOpened}
-        onClose={editProductModalHandlers.close}
-        product={selectedProductForEdit}
-        categories={Array.from(new Set(products.map((p) => p.category))).sort()}
-        onSave={handleEditProduct}
       />
 
       <ReturnDrawer
