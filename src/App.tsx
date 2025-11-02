@@ -54,6 +54,7 @@ import {
   CreditCard,
   ArrowLeftRight,
   Coins,
+  KeyRound,
   LayoutDashboard,
   LucideIcon,
   MonitorPlay,
@@ -1600,158 +1601,90 @@ const App = () => {
       >
         <Group
           justify="space-between"
-          align="flex-start"
+          align="center"
           h="100%"
-          px="lg"
-          style={{ flexWrap: "wrap", gap: "1.5rem" }}
+          px="md"
+          wrap="nowrap"
+          gap="xs"
         >
-          <Group gap="md" align="center">
+          <Group gap="xs" align="center" wrap="nowrap">
             <ThemeIcon
-              size={48}
-              radius="xl"
+              size={38}
+              radius="lg"
               variant="gradient"
               gradient={{ from: "blue.4", to: "cyan.4", deg: 120 }}
             >
-              <LayoutDashboard size={26} />
+              <LayoutDashboard size={20} />
             </ThemeIcon>
-            <Stack gap={4} style={{ color: "white" }}>
-              <Text fw={700} fz={22}>
+            <Stack gap={0} style={{ color: "white" }}>
+              <Text fw={700} fz={16} lh={1.2}>
                 Negocio Eliana Maipú
               </Text>
-              <Text fz="sm" style={{ color: "rgba(255,255,255,0.7)" }}>
-                Plataforma ejecutiva para control integral del negocio
+              <Text fz="xs" style={{ color: "rgba(255,255,255,0.75)" }}>
+                {now.format("ddd, D MMM • HH:mm")}
               </Text>
             </Stack>
           </Group>
-          <Group gap="md" align="center" style={{ flexWrap: "wrap", rowGap: "0.75rem" }}>
-            <Stack gap={2} align="flex-end">
-              <Group gap="xs">
-                <ThemeIcon size={30} radius="md" variant="white" color="blue">
-                  <Clock3 size={18} color="#1e3a8a" />
-                </ThemeIcon>
-                <Text fw={600} c="white" style={{ textTransform: "capitalize" }}>
-                  {now.format("dddd, D [de] MMMM [de] YYYY")}
-                </Text>
-              </Group>
-              <Text fz="sm" style={{ color: "rgba(255,255,255,0.7)", letterSpacing: "0.04em" }}>
-                {now.format("HH:mm")} hrs
-              </Text>
-            </Stack>
-            <Paper
-              withBorder
-              radius="lg"
-              p="md"
+          <Group gap="xs" align="center" wrap="nowrap">
+            {activeShift && (
+              <Badge
+                size="md"
+                variant="light"
+                style={{ background: "rgba(255,255,255,0.18)", color: "white", padding: "0.4rem 0.75rem" }}
+              >
+                {activeShift.seller} • {activeShift.type === "dia" ? "Día" : "Noche"}
+              </Badge>
+            )}
+            {adminUnlocked && (
+              <ActionIcon
+                variant="light"
+                color="yellow"
+                size="md"
+                radius="md"
+                onClick={handleLockAdmin}
+                style={{ background: "rgba(255,255,255,0.18)" }}
+              >
+                <KeyRound size={16} />
+              </ActionIcon>
+            )}
+            {activeShift ? (
+              <Button
+                size="xs"
+                variant="light"
+                color="red"
+                onClick={() => {
+                  setShiftModalMode("close");
+                  shiftModalHandlers.open();
+                }}
+                style={{ background: "rgba(255,255,255,0.18)", color: "white" }}
+              >
+                Cerrar
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="light"
+                color="teal"
+                onClick={() => {
+                  setShiftModalMode("open");
+                  shiftModalHandlers.open();
+                }}
+                style={{ background: "rgba(255,255,255,0.18)", color: "white" }}
+              >
+                Abrir
+              </Button>
+            )}
+            <ActionIcon
+              variant="light"
+              size="md"
+              radius="md"
+              onClick={() => setCustomerDisplay((prev) => !prev)}
               style={{
-                background: "rgba(255, 255, 255, 0.16)",
-                border: "1px solid rgba(255,255,255,0.3)",
-                minWidth: 240,
-                flex: "0 0 auto"
+                background: customerDisplay ? "rgba(248,113,113,0.25)" : "rgba(255,255,255,0.18)"
               }}
             >
-              <Stack gap={6}>
-                <Group justify="space-between" align="center">
-                  <Text fw={600} c="white" fz="sm">
-                    Estado del turno
-                  </Text>
-                  <Badge
-                    size="sm"
-                    radius="sm"
-                    color={activeShift ? "teal" : "gray"}
-                    variant="light"
-                  >
-                    {activeShift ? "Activo" : "Sin turno"}
-                  </Badge>
-                </Group>
-                {activeShift ? (
-                  <>
-                    <Text fz="sm" c="white">
-                      {activeShift.seller} • {activeShift.type === "dia" ? "Turno día" : "Turno noche"}
-                    </Text>
-                    <Text fz="xs" style={{ color: "rgba(255,255,255,0.75)" }}>
-                      Inicio: {formatDateTime(activeShift.start)}
-                    </Text>
-                  </>
-                ) : (
-                  <Text fz="sm" style={{ color: "rgba(255,255,255,0.75)" }}>
-                    Aún no se registra apertura de caja.
-                  </Text>
-                )}
-              </Stack>
-            </Paper>
-            <Group gap="sm" align="center">
-              {adminUnlocked ? (
-                <Button size="sm" variant="outline" color="yellow" onClick={handleLockAdmin}>
-                  Cerrar sesión
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  color="gray"
-                  onClick={() => {
-                    setPendingTab(activeTab);
-                    passwordModalHandlers.open();
-                  }}
-                >
-                  Admin
-                </Button>
-              )}
-              {activeShift ? (
-                <Button
-                  size="sm"
-                  variant="gradient"
-                  gradient={{ from: "pink", to: "red", deg: 120 }}
-                  leftSection={<RefreshCcw size={16} />}
-                  onClick={() => {
-                    setShiftModalMode("close");
-                    shiftModalHandlers.open();
-                  }}
-                  style={{ fontWeight: 600 }}
-                >
-                  Cerrar turno
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="gradient"
-                  gradient={{ from: "teal", to: "cyan", deg: 120 }}
-                  leftSection={<Clock3 size={16} />}
-                  onClick={() => {
-                    setShiftModalMode("open");
-                    shiftModalHandlers.open();
-                  }}
-                  style={{ fontWeight: 600 }}
-                >
-                  Abrir turno
-                </Button>
-              )}
-              <Tooltip
-                label={colorScheme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-              >
-                <ActionIcon
-                  variant="white"
-                  size="lg"
-                  radius="md"
-                  onClick={() => setColorScheme(colorScheme === "dark" ? "light" : "dark")}
-                  style={{ background: "rgba(255,255,255,0.22)" }}
-                >
-                  {colorScheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-                </ActionIcon>
-              </Tooltip>
-              <Tooltip label={customerDisplay ? "Cerrar vista cliente" : "Mostrar vista cliente"}>
-                <ActionIcon
-                  variant="white"
-                  size="lg"
-                  radius="md"
-                  onClick={() => setCustomerDisplay((prev) => !prev)}
-                  style={{
-                    background: customerDisplay ? "rgba(248,113,113,0.35)" : "rgba(255,255,255,0.22)"
-                  }}
-                >
-                  <MonitorPlay size={18} />
-                </ActionIcon>
-              </Tooltip>
-            </Group>
+              <MonitorPlay size={16} color="white" />
+            </ActionIcon>
           </Group>
         </Group>
       </AppShell.Header>
@@ -2005,7 +1938,7 @@ const App = () => {
                             }
                           />
                           <ScrollArea h={isMobile ? 400 : 520}>
-                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                            <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
                               {filteredProducts.map((product) => {
                                 const stockRatio = Math.min(
                                   100,
@@ -2296,38 +2229,6 @@ const App = () => {
                           </Stack>
                         </Stack>
                       </Card>
-                      {activeShift && (
-                        <Card withBorder radius="lg">
-                          <Stack gap="xs">
-                            <Group justify="space-between">
-                              <Text fw={600}>Turno activo</Text>
-                              <Badge color="teal" variant="light">
-                                {activeShift.type === "dia" ? "Día" : "Noche"}
-                              </Badge>
-                            </Group>
-                            <Text size="sm" c="dimmed">
-                              {activeShift.seller} • desde {formatDateTime(activeShift.start)}
-                            </Text>
-                            <Divider />
-                            <Stack gap="xs">
-                              <Group justify="space-between">
-                                <Text>Total ventas</Text>
-                                <Text fw={700}>{formatCurrency(shiftSummary.total)}</Text>
-                              </Group>
-                              <Group justify="space-between">
-                                <Text>Tickets</Text>
-                                <Text fw={700}>{shiftSummary.tickets}</Text>
-                              </Group>
-                              {Object.entries(shiftSummary.byPayment).map(([key, value]) => (
-                                <Group key={key} justify="space-between">
-                                  <Text c="dimmed">{key.toUpperCase()}</Text>
-                                  <Text fw={600}>{formatCurrency(value)}</Text>
-                                </Group>
-                              ))}
-                            </Stack>
-                          </Stack>
-                        </Card>
-                      )}
                     </Stack>
                   </Grid.Col>
                 </Grid>
