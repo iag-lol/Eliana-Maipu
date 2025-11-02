@@ -221,14 +221,28 @@ const toNumber = (value: unknown): number => {
   return 0;
 };
 
-const mapClientRow = (row: any): Client => ({
-  id: row.id,
-  name: row.name,
-  authorized: row.authorized ?? false,
-  balance: toNumber(row.balance),
-  limit: toNumber(row.credit_limit ?? row.limit),
-  updated_at: row.updated_at
-});
+const mapClientRow = (row: any): Client => {
+  const limitValue = toNumber(row.limit);
+
+  // Debug: mostrar valores para diagnosticar
+  if (limitValue === 0 && row.limit !== 0) {
+    console.warn("⚠️ Cliente con límite en 0:", {
+      name: row.name,
+      rawLimit: row.limit,
+      parsedLimit: limitValue,
+      rowData: row
+    });
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    authorized: row.authorized ?? false,
+    balance: toNumber(row.balance),
+    limit: limitValue,
+    updated_at: row.updated_at
+  };
+};
 
 const mapSaleRow = (row: any): Sale => ({
   id: row.id,
@@ -284,7 +298,7 @@ async function fetchProducts(): Promise<Product[]> {
 async function fetchClients(): Promise<Client[]> {
   const { data, error } = await supabase
     .from("elianamaipu_clients")
-    .select("*")
+    .select('id, name, authorized, balance, "limit", updated_at')
     .order("name", { ascending: true });
 
   if (error) {
@@ -1593,11 +1607,24 @@ const App = () => {
         });
         return false;
       }
+
       const projected = client.balance + cartTotals.total;
+      const available = client.limit - client.balance;
+
+      // Debug: mostrar información de crédito
+      console.log("🔍 Validación de crédito:", {
+        cliente: client.name,
+        límite: client.limit,
+        deudaActual: client.balance,
+        compra: cartTotals.total,
+        proyectado: projected,
+        disponible: available
+      });
+
       if (projected > client.limit) {
         notifications.show({
           title: "Límite excedido",
-          message: "La compra supera el límite de crédito del cliente.",
+          message: `Crédito disponible: ${formatCurrency(available)}. Compra: ${formatCurrency(cartTotals.total)}`,
           color: "red"
         });
         return false;
@@ -2022,12 +2049,16 @@ const App = () => {
   };
 
   const handleCreateClient = async ({ name, limit, authorized }: { name: string; limit: number; authorized: boolean }) => {
-    const { error } = await supabase.from("elianamaipu_clients").insert({
-      name,
-      authorized,
-      balance: 0,
-      "limit": limit
-    });
+    const { data, error } = await supabase
+      .from("elianamaipu_clients")
+      .insert({
+        name,
+        authorized,
+        balance: 0,
+        "limit": limit
+      })
+      .select('id, name, authorized, balance, "limit", updated_at')
+      .single();
 
     if (error) {
       notifications.show({
@@ -2037,6 +2068,9 @@ const App = () => {
       });
       return;
     }
+
+    // Debug: verificar que se guardó correctamente
+    console.log("✅ Cliente creado en DB:", data);
 
     notifications.show({
       title: "Cliente creado",
