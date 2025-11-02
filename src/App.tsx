@@ -566,6 +566,7 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
               }}
               min={0}
               thousandSeparator="."
+              decimalSeparator=","
             />
             <Badge color="teal" variant="light">
               Mantén el control en tiempo real del efectivo durante el turno.
@@ -639,6 +640,7 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
               }}
               min={0}
               thousandSeparator="."
+              decimalSeparator=","
             />
             <Paper withBorder p="md" radius="md">
               <Stack gap="xs">
@@ -729,6 +731,7 @@ const ClientModal = ({ opened, onClose, onCreateClient }: ClientModalProps) => {
           }}
           min={0}
           thousandSeparator="."
+          decimalSeparator=","
           required
         />
         <Switch
@@ -987,6 +990,7 @@ const FiadoPaymentModal = ({ opened, client, mode, onClose, onSubmit }: FiadoPay
             setAmount(Number.isFinite(parsed) ? parsed : undefined);
           }}
           thousandSeparator="."
+          decimalSeparator=","
         />
         {mode === "abono" && (
           <TextInput
