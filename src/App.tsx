@@ -105,7 +105,11 @@ import { formatCurrency, formatDate, formatDateTime, formatTime } from "./utils/
 dayjs.extend(relativeTime);
 dayjs.locale("es");
 
-const ADMIN_PASSWORD = "eliana152100";
+// Sistema de roles y contraseñas
+type Role = "admin" | "manager";
+
+const ADMIN_PASSWORD = "eliana152100"; // Acceso completo
+const MANAGER_PASSWORD = "selena1521"; // Solo dashboard, POS, inventario
 
 type TabId = "dashboard" | "pos" | "inventory" | "fiados" | "reports" | "shifts";
 
@@ -113,16 +117,16 @@ interface TabConfig {
   id: TabId;
   label: string;
   icon: LucideIcon;
-  adminOnly?: boolean;
+  requiredRole?: Role; // Si no tiene requiredRole, es accesible para todos
 }
 
 const TABS: TabConfig[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "pos", label: "Punto de venta", icon: ShoppingCart },
-  { id: "inventory", label: "Inventario", icon: BoxIcon, adminOnly: true },
-  { id: "fiados", label: "Clientes fiados", icon: UsersRound, adminOnly: true },
-  { id: "reports", label: "Reportes", icon: BarChart3, adminOnly: true },
-  { id: "shifts", label: "Turnos", icon: Clock3, adminOnly: true }
+  { id: "inventory", label: "Inventario", icon: BoxIcon, requiredRole: "manager" }, // manager o superior
+  { id: "fiados", label: "Clientes fiados", icon: UsersRound, requiredRole: "admin" }, // solo admin
+  { id: "reports", label: "Reportes", icon: BarChart3, requiredRole: "admin" }, // solo admin
+  { id: "shifts", label: "Turnos", icon: Clock3, requiredRole: "admin" } // solo admin
 ];
 
 interface PaymentOption {
@@ -481,7 +485,7 @@ const CustomerDisplay = ({
 interface PasswordModalProps {
   opened: boolean;
   onClose: () => void;
-  onUnlock: () => void;
+  onUnlock: (role: Role) => void;
 }
 
 const PasswordModal = ({ opened, onClose, onUnlock }: PasswordModalProps) => {
@@ -498,11 +502,19 @@ const PasswordModal = ({ opened, onClose, onUnlock }: PasswordModalProps) => {
   const handleUnlock = () => {
     if (password === ADMIN_PASSWORD) {
       notifications.show({
-        title: "Acceso concedido",
-        message: "Secciones administrativas desbloqueadas.",
+        title: "Acceso completo concedido",
+        message: "Todas las secciones administrativas desbloqueadas.",
         color: "teal"
       });
-      onUnlock();
+      onUnlock("admin");
+      onClose();
+    } else if (password === MANAGER_PASSWORD) {
+      notifications.show({
+        title: "Acceso administrativo concedido",
+        message: "Acceso a Dashboard, Punto de venta e Inventario.",
+        color: "blue"
+      });
+      onUnlock("manager");
       onClose();
     } else {
       setError("Contraseña incorrecta. Inténtalo nuevamente.");
@@ -1351,9 +1363,23 @@ const App = () => {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
 
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [userRole, setUserRole] = useState<Role | null>(null);
   const [pendingTab, setPendingTab] = useState<TabId | null>(null);
   const [passwordModalOpened, passwordModalHandlers] = useDisclosure(false);
+
+  // Función para verificar si el usuario tiene acceso a una pestaña
+  const hasAccess = (tab: TabConfig): boolean => {
+    if (!tab.requiredRole) return true; // Sin restricción
+    if (!userRole) return false; // No autenticado
+
+    // admin tiene acceso a todo
+    if (userRole === "admin") return true;
+
+    // manager solo tiene acceso a pestañas con requiredRole === "manager"
+    if (userRole === "manager" && tab.requiredRole === "manager") return true;
+
+    return false;
+  };
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
@@ -1397,11 +1423,11 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (adminUnlocked && pendingTab) {
+    if (userRole && pendingTab) {
       setActiveTab(pendingTab);
       setPendingTab(null);
     }
-  }, [adminUnlocked, pendingTab]);
+  }, [userRole, pendingTab]);
 
   const productQuery = useQuery({
     queryKey: ["products"],
@@ -1479,7 +1505,9 @@ const App = () => {
 
   const guardTabChange = (tab: TabId) => {
     const target = TABS.find((item) => item.id === tab);
-    if (target?.adminOnly && !adminUnlocked) {
+    if (!target) return;
+
+    if (!hasAccess(target)) {
       setPendingTab(tab);
       passwordModalHandlers.open();
       return;
@@ -1488,12 +1516,12 @@ const App = () => {
   };
 
   const handleLockAdmin = () => {
-    setAdminUnlocked(false);
+    setUserRole(null);
     setPendingTab(null);
-    setActiveTab("pos");
+    setActiveTab("dashboard");
     notifications.show({
-      title: "Modo administrativo desactivado",
-      message: "Las secciones sensibles quedaron bloqueadas nuevamente.",
+      title: "Sesión cerrada",
+      message: "Las secciones administrativas quedaron bloqueadas.",
       color: "blue"
     });
   };
@@ -2226,7 +2254,7 @@ const App = () => {
                 {activeShift.seller} • {activeShift.type === "dia" ? "Día" : "Noche"}
               </Badge>
             )}
-            {adminUnlocked && (
+            {userRole && (
               <ActionIcon
                 variant="light"
                 color="yellow"
@@ -2353,7 +2381,7 @@ const App = () => {
             {TABS.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
-              const disabled = tab.adminOnly && !adminUnlocked;
+              const disabled = !hasAccess(tab);
               const lowStockCount = tab.id === "inventory" ? products.filter((p) => p.stock <= p.minStock).length : 0;
 
               return (
@@ -2398,7 +2426,7 @@ const App = () => {
             </Stack>
           </Paper>
 
-          {adminUnlocked ? (
+          {userRole ? (
             <Button variant="light" color="yellow" onClick={handleLockAdmin}>
               Cerrar sesión administrativa
             </Button>
@@ -2929,7 +2957,7 @@ const App = () => {
             <Grid gutter="xs">
             {TABS.map((tab) => {
               const Icon = tab.icon;
-              const disabled = tab.adminOnly && !adminUnlocked;
+              const disabled = !hasAccess(tab);
               return (
                 <Grid.Col key={tab.id} span={12 / TABS.length}>
                   <Button
@@ -2945,7 +2973,7 @@ const App = () => {
               );
             })}
             </Grid>
-            {adminUnlocked ? (
+            {userRole ? (
               <Button size="sm" variant="light" color="yellow" onClick={handleLockAdmin}>
                 Cerrar sesión administrativa
               </Button>
@@ -2970,7 +2998,7 @@ const App = () => {
       <PasswordModal
         opened={passwordModalOpened}
         onClose={passwordModalHandlers.close}
-        onUnlock={() => setAdminUnlocked(true)}
+        onUnlock={(role) => setUserRole(role)}
       />
 
       <ShiftModal
