@@ -1,5 +1,6 @@
 import "./App.css";
 import {
+  Accordion,
   ActionIcon,
   AppShell,
   Autocomplete,
@@ -51,10 +52,13 @@ import {
   BadgeCheck,
   BarChart3,
   BoxIcon,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   CreditCard,
   ArrowLeftRight,
   Coins,
+  DollarSign,
   Edit,
   Filter,
   KeyRound,
@@ -69,9 +73,11 @@ import {
   RefreshCcw,
   Search,
   ShieldCheck,
+  ShoppingBag,
   ShoppingCart,
   Sun,
   TrendingUp,
+  User,
   UserPlus,
   UsersRound,
   Wallet,
@@ -206,14 +212,25 @@ const mapProductRow = (row: any): Product => ({
   updated_at: row.updated_at
 });
 
-const mapClientRow = (row: any): Client => ({
-  id: row.id,
-  name: row.name,
-  authorized: row.authorized ?? false,
-  balance: row.balance ?? 0,
-  limit: row.credit_limit ?? 0,
-  updated_at: row.updated_at
-});
+const mapClientRow = (row: any): Client => {
+  const toNumber = (value: unknown) => {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
+
+  return {
+    id: row.id,
+    name: row.name,
+    authorized: row.authorized ?? false,
+    balance: toNumber(row.balance),
+    limit: toNumber(row.credit_limit ?? row.limit),
+    updated_at: row.updated_at
+  };
+};
 
 const mapSaleRow = (row: any): Sale => ({
   id: row.id,
@@ -2835,7 +2852,13 @@ const App = () => {
               />
             )}
             {activeTab === "shifts" && (
-              <ShiftsView activeShift={activeShift} summary={shiftSummary} history={shiftHistory} />
+              <ShiftsView
+                activeShift={activeShift}
+                summary={shiftSummary}
+                history={shiftHistory}
+                sales={sales}
+                products={products}
+              />
             )}
           </Stack>
         )}
@@ -4116,141 +4139,497 @@ interface ShiftsViewProps {
   activeShift: Shift | undefined;
   summary: ShiftSummary;
   history: Shift[];
+  sales: Sale[];
+  products: Product[];
 }
 
-const ShiftsView = ({ activeShift, summary, history }: ShiftsViewProps) => {
+const ShiftsView = ({ activeShift, summary, history, sales, products }: ShiftsViewProps) => {
   const closedCount = history.length;
   const totalSales = history.reduce((acc, shift) => acc + (shift.total_sales ?? 0), 0);
   const totalDifferences = history.reduce((acc, shift) => acc + (shift.difference ?? 0), 0);
   const averageSales = closedCount > 0 ? totalSales / closedCount : 0;
 
+  // Función para obtener productos vendidos por turno
+  const getShiftProducts = (shiftId: string) => {
+    const shiftSales = sales.filter((sale) => sale.shiftId === shiftId && sale.type === "sale");
+    const productMap = new Map<string, { name: string; quantity: number; total: number }>();
+
+    shiftSales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const existing = productMap.get(item.productId);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.total += item.price * item.quantity;
+        } else {
+          productMap.set(item.productId, {
+            name: item.name,
+            quantity: item.quantity,
+            total: item.price * item.quantity
+          });
+        }
+      });
+    });
+
+    return Array.from(productMap.values()).sort((a, b) => b.total - a.total);
+  };
+
   return (
     <Stack gap="xl">
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
-        <Paper withBorder radius="lg" p="md">
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              Turnos cerrados
-            </Text>
-            <Text fw={700} fz="xl">
+      {/* KPIs */}
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg">
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, var(--mantine-color-indigo-6), var(--mantine-color-indigo-4))"
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Turnos Cerrados
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <BarChart3 size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
               {closedCount}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              Historial completo
             </Text>
           </Stack>
-        </Paper>
-        <Paper withBorder radius="lg" p="md">
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              Ventas promedio
-            </Text>
-            <Text fw={700} fz="xl">
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, var(--mantine-color-teal-6), var(--mantine-color-teal-4))"
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Ventas Promedio
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <TrendingUp size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
               {formatCurrency(averageSales)}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              Por turno
             </Text>
           </Stack>
-        </Paper>
-        <Paper withBorder radius="lg" p="md">
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              Diferencia acumulada
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, var(--mantine-color-violet-6), var(--mantine-color-violet-4))"
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Total Acumulado
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <DollarSign size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
+              {formatCurrency(totalSales)}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              Todos los turnos
             </Text>
-            <Text fw={700} fz="xl" c={totalDifferences === 0 ? "teal" : totalDifferences > 0 ? "green" : "orange"}>
+          </Stack>
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          style={{
+            background: `linear-gradient(135deg, ${
+              totalDifferences === 0
+                ? "var(--mantine-color-gray-6), var(--mantine-color-gray-4)"
+                : totalDifferences > 0
+                ? "var(--mantine-color-green-6), var(--mantine-color-green-4)"
+                : "var(--mantine-color-orange-6), var(--mantine-color-orange-4)"
+            })`
+          }}
+        >
+          <Stack gap="xs">
+            <Group justify="space-between">
+              <Text size="sm" c="white" fw={500}>
+                Diferencia Total
+              </Text>
+              <ThemeIcon color="white" variant="light" radius="xl">
+                <Wallet size={20} />
+              </ThemeIcon>
+            </Group>
+            <Title order={2} c="white">
               {formatCurrency(totalDifferences)}
+            </Title>
+            <Text size="xs" c="white" opacity={0.9}>
+              {totalDifferences === 0 ? "Exacto" : totalDifferences > 0 ? "Sobrante" : "Faltante"}
             </Text>
           </Stack>
-        </Paper>
+        </Card>
       </SimpleGrid>
 
+      {/* Turno activo */}
       <Card withBorder radius="lg">
         <Stack gap="md">
-          <Title order={3}>Turno en curso</Title>
+          <Group justify="space-between">
+            <Title order={3}>Turno en curso</Title>
+            {activeShift && (
+              <Badge color="teal" variant="dot" size="lg">
+                ACTIVO
+              </Badge>
+            )}
+          </Group>
           {activeShift ? (
-            <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, rgba(13,148,136,0.12), rgba(45,212,191,0.18))" }}>
-              <Stack gap="sm">
+            <Paper
+              withBorder
+              p="lg"
+              radius="md"
+              style={{ background: "linear-gradient(135deg, rgba(13,148,136,0.08), rgba(45,212,191,0.12))" }}
+            >
+              <Stack gap="md">
                 <Group justify="space-between">
-                  <Text fw={600}>{activeShift.seller}</Text>
-                  <Badge color="teal" variant="light">
-                    Turno {activeShift.type === "dia" ? "día" : "noche"}
+                  <Group gap="sm">
+                    <ThemeIcon color="teal" variant="light" size="lg">
+                      <User size={20} />
+                    </ThemeIcon>
+                    <div>
+                      <Text fw={700} size="lg">
+                        {activeShift.seller}
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        Turno {activeShift.type === "dia" ? "día" : "noche"}
+                      </Text>
+                    </div>
+                  </Group>
+                  <Badge color="teal" variant="light" size="lg">
+                    <Clock3 size={14} style={{ marginRight: 4 }} />
+                    {formatDateTime(activeShift.start)}
                   </Badge>
                 </Group>
-                <Text size="sm" c="dimmed">
-                  Inicio: {formatDateTime(activeShift.start)}
-                </Text>
+
                 <Divider />
-                <Group justify="space-between">
-                  <Text>Total ventas</Text>
-                  <Text fw={700}>{formatCurrency(summary.total)}</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text>Tickets</Text>
-                  <Text fw={700}>{summary.tickets}</Text>
-                </Group>
-                {Object.entries(summary.byPayment).map(([method, value]) => (
-                  <Group key={method} justify="space-between">
-                    <Text c="dimmed">{method.toUpperCase()}</Text>
-                    <Text fw={600}>{formatCurrency(value)}</Text>
-                  </Group>
-                ))}
+
+                <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                  <Paper withBorder p="sm" radius="md">
+                    <Stack gap={4}>
+                      <Text size="xs" c="dimmed">
+                        TOTAL VENTAS
+                      </Text>
+                      <Text fw={700} size="xl">
+                        {formatCurrency(summary.total)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {summary.tickets} tickets
+                      </Text>
+                    </Stack>
+                  </Paper>
+                  <Paper withBorder p="sm" radius="md">
+                    <Stack gap={4}>
+                      <Text size="xs" c="dimmed">
+                        EFECTIVO EN CAJA
+                      </Text>
+                      <Text fw={700} size="xl" c="teal">
+                        {formatCurrency((activeShift.initial_cash ?? 0) + (summary.byPayment.cash ?? 0))}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        Inicial: {formatCurrency(activeShift.initial_cash ?? 0)}
+                      </Text>
+                    </Stack>
+                  </Paper>
+                  <Paper withBorder p="sm" radius="md">
+                    <Stack gap={4}>
+                      <Text size="xs" c="dimmed">
+                        TICKET PROMEDIO
+                      </Text>
+                      <Text fw={700} size="xl">
+                        {summary.tickets > 0 ? formatCurrency(summary.total / summary.tickets) : formatCurrency(0)}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        Por venta
+                      </Text>
+                    </Stack>
+                  </Paper>
+                </SimpleGrid>
+
+                <Paper withBorder p="sm" radius="md">
+                  <Stack gap="xs">
+                    <Text size="sm" fw={600} c="dimmed">
+                      DESGLOSE POR MÉTODO DE PAGO
+                    </Text>
+                    <Grid gutter="xs">
+                      {Object.entries(summary.byPayment).map(([method, value]) => (
+                        <Grid.Col key={method} span={6}>
+                          <Group justify="space-between">
+                            <Text size="sm">{PAYMENT_LABELS[method as PaymentMethod]}</Text>
+                            <Text fw={600}>{formatCurrency(value)}</Text>
+                          </Group>
+                        </Grid.Col>
+                      ))}
+                    </Grid>
+                  </Stack>
+                </Paper>
               </Stack>
             </Paper>
           ) : (
-            <Paper withBorder p="lg" radius="md">
-              <Text c="dimmed" ta="center">
-                No hay turnos activos. Inicia uno desde el encabezado.
-              </Text>
+            <Paper withBorder p="xl" radius="md">
+              <Stack gap="sm" align="center">
+                <ThemeIcon color="gray" variant="light" size="xl">
+                  <Clock3 size={28} />
+                </ThemeIcon>
+                <Text c="dimmed" ta="center" fw={500}>
+                  No hay turnos activos
+                </Text>
+                <Text c="dimmed" ta="center" size="sm">
+                  Inicia un turno desde el encabezado para comenzar a registrar ventas
+                </Text>
+              </Stack>
             </Paper>
           )}
         </Stack>
       </Card>
 
+      {/* Historial de turnos */}
       <Card withBorder radius="lg">
         <Stack gap="md">
           <Group justify="space-between">
-            <Title order={4}>Historial de turnos</Title>
-            <Badge color="indigo" variant="light">
-              {history.length} turnos
+            <Title order={3}>Historial de turnos cerrados</Title>
+            <Badge color="indigo" variant="light" size="lg">
+              {history.length} turnos registrados
             </Badge>
           </Group>
-          <ScrollArea h={420}>
-            <Table highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Vendedor</Table.Th>
-                  <Table.Th>Inicio</Table.Th>
-                  <Table.Th>Cierre</Table.Th>
-                  <Table.Th>Turno</Table.Th>
-                  <Table.Th>Ventas</Table.Th>
-                  <Table.Th>Efectivo</Table.Th>
-                  <Table.Th>Diferencia</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {history.length === 0 ? (
-                  <Table.Tr>
-                    <Table.Td colSpan={7}>
-                      <Text c="dimmed" ta="center">
-                        Aún no se registran turnos cerrados.
-                      </Text>
-                    </Table.Td>
-                  </Table.Tr>
-                ) : (
-                  history.map((shift) => (
-                    <Table.Tr key={shift.id}>
-                      <Table.Td>{shift.seller}</Table.Td>
-                      <Table.Td>{formatDateTime(shift.start)}</Table.Td>
-                      <Table.Td>{shift.end ? formatDateTime(shift.end) : "-"}</Table.Td>
-                      <Table.Td>{shift.type === "dia" ? "Día" : "Noche"}</Table.Td>
-                      <Table.Td>{formatCurrency(shift.total_sales ?? 0)}</Table.Td>
-                      <Table.Td>{formatCurrency(shift.cash_expected ?? 0)}</Table.Td>
-                      <Table.Td>
-                        <Badge color={(shift.difference ?? 0) === 0 ? "teal" : (shift.difference ?? 0) > 0 ? "green" : "orange"}>
-                          {formatCurrency(shift.difference ?? 0)}
-                        </Badge>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))
-                )}
-              </Table.Tbody>
-            </Table>
-          </ScrollArea>
+
+          {history.length === 0 ? (
+            <Paper withBorder p="xl" radius="md">
+              <Stack gap="sm" align="center">
+                <ThemeIcon color="gray" variant="light" size="xl">
+                  <BarChart3 size={28} />
+                </ThemeIcon>
+                <Text c="dimmed" ta="center" fw={500}>
+                  Aún no hay turnos cerrados
+                </Text>
+                <Text c="dimmed" ta="center" size="sm">
+                  Los turnos cerrados aparecerán aquí con su información detallada
+                </Text>
+              </Stack>
+            </Paper>
+          ) : (
+            <Accordion variant="separated" radius="md">
+              {history.map((shift) => {
+                const shiftProducts = getShiftProducts(shift.id);
+                const diffAmount = shift.difference ?? 0;
+
+                return (
+                  <Accordion.Item key={shift.id} value={shift.id}>
+                    <Accordion.Control>
+                      <Group justify="space-between" wrap="nowrap">
+                        <Group gap="md">
+                          <ThemeIcon
+                            color={shift.type === "dia" ? "blue" : "violet"}
+                            variant="light"
+                            size="lg"
+                            radius="md"
+                          >
+                            <User size={20} />
+                          </ThemeIcon>
+                          <div>
+                            <Text fw={700}>{shift.seller}</Text>
+                            <Text size="sm" c="dimmed">
+                              Turno {shift.type === "dia" ? "día" : "noche"}
+                            </Text>
+                          </div>
+                        </Group>
+                        <Group gap="sm">
+                          <Badge color="gray" variant="light">
+                            {shift.tickets ?? 0} tickets
+                          </Badge>
+                          <Badge color="teal" variant="light">
+                            {formatCurrency(shift.total_sales ?? 0)}
+                          </Badge>
+                          <Badge
+                            color={diffAmount === 0 ? "gray" : diffAmount > 0 ? "green" : "orange"}
+                            variant="filled"
+                          >
+                            {diffAmount === 0 ? "Exacto" : diffAmount > 0 ? `+${formatCurrency(diffAmount)}` : formatCurrency(diffAmount)}
+                          </Badge>
+                        </Group>
+                      </Group>
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Stack gap="lg">
+                        {/* Información del turno */}
+                        <Paper withBorder p="md" radius="md" style={{ background: "rgba(99,102,241,0.03)" }}>
+                          <Grid gutter="md">
+                            <Grid.Col span={{ base: 12, sm: 6 }}>
+                              <Stack gap="xs">
+                                <Group gap="xs">
+                                  <Clock3 size={16} style={{ color: "var(--mantine-color-dimmed)" }} />
+                                  <Text size="sm" c="dimmed" fw={600}>
+                                    HORARIO
+                                  </Text>
+                                </Group>
+                                <Text size="sm">
+                                  <strong>Inicio:</strong> {formatDateTime(shift.start)}
+                                </Text>
+                                <Text size="sm">
+                                  <strong>Cierre:</strong> {shift.end ? formatDateTime(shift.end) : "-"}
+                                </Text>
+                              </Stack>
+                            </Grid.Col>
+                            <Grid.Col span={{ base: 12, sm: 6 }}>
+                              <Stack gap="xs">
+                                <Group gap="xs">
+                                  <User size={16} style={{ color: "var(--mantine-color-dimmed)" }} />
+                                  <Text size="sm" c="dimmed" fw={600}>
+                                    VENDEDOR
+                                  </Text>
+                                </Group>
+                                <Text size="sm">
+                                  <strong>Nombre:</strong> {shift.seller}
+                                </Text>
+                                <Text size="sm">
+                                  <strong>Turno:</strong> {shift.type === "dia" ? "Día" : "Noche"}
+                                </Text>
+                              </Stack>
+                            </Grid.Col>
+                          </Grid>
+                        </Paper>
+
+                        {/* Resumen financiero */}
+                        <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+                          <Paper withBorder p="md" radius="md">
+                            <Stack gap={4}>
+                              <Text size="xs" c="dimmed" fw={600}>
+                                EFECTIVO INICIAL
+                              </Text>
+                              <Text fw={700} size="lg">
+                                {formatCurrency(shift.initial_cash ?? 0)}
+                              </Text>
+                            </Stack>
+                          </Paper>
+                          <Paper withBorder p="md" radius="md">
+                            <Stack gap={4}>
+                              <Text size="xs" c="dimmed" fw={600}>
+                                EFECTIVO ESPERADO
+                              </Text>
+                              <Text fw={700} size="lg">
+                                {formatCurrency(shift.cash_expected ?? 0)}
+                              </Text>
+                            </Stack>
+                          </Paper>
+                          <Paper withBorder p="md" radius="md">
+                            <Stack gap={4}>
+                              <Text size="xs" c="dimmed" fw={600}>
+                                EFECTIVO CONTADO
+                              </Text>
+                              <Text fw={700} size="lg">
+                                {formatCurrency(shift.cash_counted ?? 0)}
+                              </Text>
+                            </Stack>
+                          </Paper>
+                          <Paper withBorder p="md" radius="md">
+                            <Stack gap={4}>
+                              <Text size="xs" c="dimmed" fw={600}>
+                                DIFERENCIA
+                              </Text>
+                              <Text
+                                fw={700}
+                                size="lg"
+                                c={diffAmount === 0 ? "gray" : diffAmount > 0 ? "green" : "orange"}
+                              >
+                                {formatCurrency(diffAmount)}
+                              </Text>
+                            </Stack>
+                          </Paper>
+                        </SimpleGrid>
+
+                        {/* Desglose por método de pago */}
+                        {shift.payments_breakdown && (
+                          <Paper withBorder p="md" radius="md">
+                            <Stack gap="sm">
+                              <Group gap="xs">
+                                <Wallet size={18} style={{ color: "var(--mantine-color-dimmed)" }} />
+                                <Text fw={600}>Desglose por método de pago</Text>
+                              </Group>
+                              <Grid gutter="md">
+                                {Object.entries(shift.payments_breakdown).map(([method, value]) => (
+                                  <Grid.Col key={method} span={{ base: 6, sm: 4, md: 3 }}>
+                                    <Paper withBorder p="xs" radius="sm">
+                                      <Stack gap={4}>
+                                        <Text size="xs" c="dimmed">
+                                          {PAYMENT_LABELS[method as PaymentMethod]}
+                                        </Text>
+                                        <Text fw={600}>{formatCurrency(value)}</Text>
+                                      </Stack>
+                                    </Paper>
+                                  </Grid.Col>
+                                ))}
+                              </Grid>
+                            </Stack>
+                          </Paper>
+                        )}
+
+                        {/* Productos vendidos */}
+                        {shiftProducts.length > 0 && (
+                          <Paper withBorder p="md" radius="md">
+                            <Stack gap="sm">
+                              <Group gap="xs">
+                                <ShoppingBag size={18} style={{ color: "var(--mantine-color-dimmed)" }} />
+                                <Text fw={600}>Productos vendidos ({shiftProducts.length})</Text>
+                              </Group>
+                              <ScrollArea h={300}>
+                                <Table highlightOnHover>
+                                  <Table.Thead>
+                                    <Table.Tr>
+                                      <Table.Th>Producto</Table.Th>
+                                      <Table.Th>Cantidad</Table.Th>
+                                      <Table.Th>Total</Table.Th>
+                                    </Table.Tr>
+                                  </Table.Thead>
+                                  <Table.Tbody>
+                                    {shiftProducts.map((product, idx) => (
+                                      <Table.Tr key={idx}>
+                                        <Table.Td>
+                                          <Text fw={500}>{product.name}</Text>
+                                        </Table.Td>
+                                        <Table.Td>
+                                          <Badge color="blue" variant="light">
+                                            {product.quantity} unidades
+                                          </Badge>
+                                        </Table.Td>
+                                        <Table.Td>
+                                          <Text fw={600}>{formatCurrency(product.total)}</Text>
+                                        </Table.Td>
+                                      </Table.Tr>
+                                    ))}
+                                  </Table.Tbody>
+                                </Table>
+                              </ScrollArea>
+                            </Stack>
+                          </Paper>
+                        )}
+                      </Stack>
+                    </Accordion.Panel>
+                  </Accordion.Item>
+                );
+              })}
+            </Accordion>
+          )}
         </Stack>
       </Card>
     </Stack>
