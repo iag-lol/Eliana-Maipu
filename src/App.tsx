@@ -802,8 +802,6 @@ const AddStockModal = ({ opened, onClose, products, selectedProductId, onConfirm
     }
   }, [opened, selectedProductId]);
 
-  if (!opened) return null;
-
   const selectedProduct = products.find((p) => p.id === productId);
 
   return (
@@ -924,13 +922,11 @@ const EditProductModal = ({ opened, onClose, product, categories, onSave }: Edit
         setCategory("");
         setBarcode("");
         setPrice(undefined);
-        setStock(0);
+        setStock(undefined);
         setMinStock(5);
       }
     }
   }, [opened, product]);
-
-  if (!opened) return null;
 
   return (
     <Modal
