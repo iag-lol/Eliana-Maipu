@@ -1603,7 +1603,6 @@ const App = () => {
     if (!validateSale()) return;
 
     const timestamp = new Date().toISOString();
-    const ticket = String((sales[0]?.ticket ? Number(sales[0].ticket) + 1 : sales.length + 1)).padStart(6, "0");
     const saleItems: SaleItem[] = cartDetailed.map((item) => ({
       id: generateId(),
       productId: item.product.id,
@@ -1618,7 +1617,6 @@ const App = () => {
         : null;
 
     const payload = {
-      ticket,
       type: "sale",
       total: cartTotals.total,
       payment_method: selectedPayment,
@@ -1631,7 +1629,11 @@ const App = () => {
       notes: selectedPayment === "fiado" ? { clientId: selectedFiadoClient } : null
     };
 
-    const { error } = await supabase.from("elianamaipu_sales").insert(payload);
+    const { data, error } = await supabase
+      .from("elianamaipu_sales")
+      .insert(payload)
+      .select("ticket")
+      .single();
 
     if (error) {
       notifications.show({
@@ -1663,7 +1665,7 @@ const App = () => {
           client_id: client.id,
           amount: cartTotals.total,
           type: "fiado",
-          description: `Compra ticket #${ticket}`,
+          description: `Compra ticket #${data?.ticket ?? "sin-ticket"}`,
           balance_after: newBalance
         });
       }
@@ -1671,7 +1673,7 @@ const App = () => {
 
     notifications.show({
       title: "Venta registrada",
-      message: `Ticket #${ticket} generado correctamente.`,
+      message: data?.ticket ? `Ticket #${data.ticket} generado correctamente.` : "Venta registrada correctamente.",
       color: "teal"
     });
 
