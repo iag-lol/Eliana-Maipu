@@ -532,6 +532,8 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
 
   const countedValue = typeof cashCounted === "number" && Number.isFinite(cashCounted) ? cashCounted : undefined;
 
+  if (!opened) return null;
+
   return (
     <Modal opened={opened} onClose={onClose} title={mode === "open" ? "Apertura de turno" : "Cierre de turno"} centered size="lg">
       <Stack gap="lg">
@@ -615,10 +617,10 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
               </Group>
               <Divider />
               <Stack gap="xs">
-                {Object.entries(summary.byPayment).map(([key, value]) => (
+                {summary.byPayment && Object.entries(summary.byPayment).map(([key, value]) => (
                   <Group key={key} justify="space-between">
                     <Text c="dimmed">{key.toUpperCase()}</Text>
-                    <Text fw={600}>{formatCurrency(value)}</Text>
+                    <Text fw={600}>{formatCurrency(value ?? 0)}</Text>
                   </Group>
                 ))}
               </Stack>
@@ -699,6 +701,8 @@ const ClientModal = ({ opened, onClose, onCreateClient }: ClientModalProps) => {
       setAuthorized(true);
     }
   }, [opened]);
+
+  if (!opened) return null;
 
   return (
     <Modal opened={opened} onClose={onClose} title="Nuevo cliente fiado" centered size="md">
@@ -1822,6 +1826,14 @@ const App = () => {
                 variant="light"
                 color="red"
                 onClick={() => {
+                  if (!activeShift) {
+                    notifications.show({
+                      title: "Sin turno activo",
+                      message: "No hay un turno abierto para cerrar.",
+                      color: "orange"
+                    });
+                    return;
+                  }
                   setShiftModalMode("close");
                   shiftModalHandlers.open();
                 }}
