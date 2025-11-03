@@ -3507,103 +3507,137 @@ const InventoryView = ({
         </Stack>
       </Card>
 
-      {/* Tabla de productos */}
-      <Card withBorder radius="lg">
-        <ScrollArea h={500}>
-          <Table highlightOnHover striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Nombre</Table.Th>
-                <Table.Th>Categoría</Table.Th>
-                <Table.Th>Código</Table.Th>
-                <Table.Th>Precio</Table.Th>
-                <Table.Th>Stock Actual</Table.Th>
-                <Table.Th>Stock Mínimo</Table.Th>
-                <Table.Th>Estado</Table.Th>
-                <Table.Th>Acciones</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {filteredProducts.length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={8}>
-                    <Text ta="center" c="dimmed" py="xl">
-                      No se encontraron productos
+      {/* Vista de tarjetas de productos */}
+      {filteredProducts.length === 0 ? (
+        <Card withBorder radius="lg" p="xl">
+          <Text ta="center" c="dimmed" size="lg">
+            No se encontraron productos
+          </Text>
+        </Card>
+      ) : (
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
+          {filteredProducts.map((product) => {
+            let statusColor = "teal";
+            let statusLabel = "Normal";
+
+            if (product.stock === 0) {
+              statusColor = "red";
+              statusLabel = "BAJO STOCK";
+            } else if (product.stock <= product.minStock) {
+              statusColor = "orange";
+              statusLabel = "BAJO STOCK";
+            }
+
+            return (
+              <Card
+                key={product.id}
+                withBorder
+                radius="lg"
+                shadow="sm"
+                p="md"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  height: "100%",
+                  minHeight: "280px"
+                }}
+              >
+                <Stack gap="xs" style={{ flex: 1 }}>
+                  {/* Nombre del producto - altura fija */}
+                  <Text
+                    fw={600}
+                    size="lg"
+                    style={{
+                      minHeight: "48px",
+                      maxHeight: "48px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      lineHeight: "24px"
+                    }}
+                  >
+                    {product.name}
+                  </Text>
+
+                  {/* Categoría */}
+                  <Badge variant="light" color="indigo" size="sm">
+                    {product.category}
+                  </Badge>
+
+                  <Divider />
+
+                  {/* Precio destacado */}
+                  <Group justify="space-between" align="center">
+                    <Text size="xs" c="dimmed" fw={600}>
+                      PRECIO
                     </Text>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (
-                filteredProducts.map((product) => {
-                  let statusColor = "teal";
-                  let statusLabel = "Normal";
+                    <Text fw={700} size="xl" c="blue">
+                      {formatCurrency(product.price)}
+                    </Text>
+                  </Group>
 
-                  if (product.stock === 0) {
-                    statusColor = "red";
-                    statusLabel = "Sin stock";
-                  } else if (product.stock <= product.minStock) {
-                    statusColor = "orange";
-                    statusLabel = "Stock bajo";
-                  }
+                  {/* Stock */}
+                  <Group justify="space-between">
+                    <Text size="sm" c="dimmed">
+                      Stock actual: <Text span fw={600}>{product.stock}</Text>
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      Mínimo: <Text span fw={600}>{product.minStock}</Text>
+                    </Text>
+                  </Group>
 
-                  return (
-                    <Table.Tr key={product.id}>
-                      <Table.Td>
-                        <Text fw={500}>{product.name}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge variant="light" color="indigo">
-                          {product.category}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm" c="dimmed">
-                          {product.barcode || "-"}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text fw={600}>{formatCurrency(product.price)}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text fw={600}>{product.stock}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text c="dimmed">{product.minStock}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge color={statusColor} variant="light">
-                          {statusLabel}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Group gap="xs">
-                          <Tooltip label="Agregar stock">
-                            <ActionIcon
-                              variant="light"
-                              color="teal"
-                              onClick={() => onAddStock(product.id)}
-                            >
-                              <Plus size={16} />
-                            </ActionIcon>
-                          </Tooltip>
-                          <Tooltip label="Editar producto">
-                            <ActionIcon
-                              variant="light"
-                              color="indigo"
-                              onClick={() => onEditProduct(product)}
-                            >
-                              <Edit size={16} />
-                            </ActionIcon>
-                          </Tooltip>
-                        </Group>
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })
-              )}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      </Card>
+                  {/* Barra de progreso de stock */}
+                  <Progress
+                    value={product.minStock > 0 ? Math.min((product.stock / (product.minStock * 2)) * 100, 100) : 100}
+                    color={product.stock === 0 ? "red" : product.stock <= product.minStock ? "orange" : "teal"}
+                    size="sm"
+                    radius="xl"
+                  />
+
+                  {/* Código de barras */}
+                  <Text size="xs" c="dimmed">
+                    {product.barcode ? `SKU: ${product.barcode}` : "Sin código asignado"}
+                  </Text>
+
+                  {/* Badge de estado */}
+                  {(product.stock === 0 || product.stock <= product.minStock) && (
+                    <Badge color={statusColor} variant="filled" fullWidth size="md">
+                      {statusLabel}
+                    </Badge>
+                  )}
+
+                  {/* Spacer para empujar botones al final */}
+                  <div style={{ flex: 1 }} />
+
+                  {/* Botones de acción */}
+                  <Group gap="xs" grow>
+                    <Button
+                      variant="light"
+                      color="teal"
+                      size="sm"
+                      leftSection={<Plus size={16} />}
+                      onClick={() => onAddStock(product.id)}
+                    >
+                      Stock
+                    </Button>
+                    <Button
+                      variant="light"
+                      color="indigo"
+                      size="sm"
+                      leftSection={<Edit size={16} />}
+                      onClick={() => onEditProduct(product)}
+                    >
+                      Editar
+                    </Button>
+                  </Group>
+                </Stack>
+              </Card>
+            );
+          })}
+        </SimpleGrid>
+      )}
     </Stack>
   );
 };
