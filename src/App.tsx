@@ -562,9 +562,12 @@ interface ShiftModalProps {
   onOpenShift: (payload: { seller: string; type: ShiftType; initialCash: number }) => void;
   onCloseShift: (payload: { cashCounted: number }) => void;
   summary: ShiftSummary & { cashExpected: number };
+  activeShift?: Shift;
+  sales?: Sale[];
+  products?: Product[];
 }
 
-const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary }: ShiftModalProps) => {
+const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary, activeShift, sales = [], products = [] }: ShiftModalProps) => {
   const [seller, setSeller] = useState("");
   const [shiftType, setShiftType] = useState<ShiftType>("dia");
   const [initialCash, setInitialCash] = useState<number | undefined>(undefined);
@@ -581,137 +584,278 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
 
   const countedValue = typeof cashCounted === "number" && Number.isFinite(cashCounted) ? cashCounted : undefined;
 
+  // Calcular productos vendidos en el turno
+  const shiftProducts = useMemo(() => {
+    if (!activeShift) return [];
+
+    const shiftSales = sales.filter((sale) => sale.shiftId === activeShift.id && sale.type === "sale");
+    const productMap = new Map<string, { name: string; quantity: number; total: number }>();
+
+    shiftSales.forEach((sale) => {
+      sale.items.forEach((item) => {
+        const existing = productMap.get(item.productId);
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.total += item.price * item.quantity;
+        } else {
+          productMap.set(item.productId, {
+            name: item.name,
+            quantity: item.quantity,
+            total: item.price * item.quantity
+          });
+        }
+      });
+    });
+
+    return Array.from(productMap.values()).sort((a, b) => b.total - a.total);
+  }, [activeShift, sales]);
+
   if (!opened) return null;
 
-  return (
-    <Modal opened={opened} onClose={onClose} title={mode === "open" ? "Apertura de turno" : "Cierre de turno"} centered size="lg">
-      <Stack gap="lg">
-        {mode === "open" ? (
-          <>
-            <TextInput
-              label="Nombre del vendedor"
-              placeholder="Ej: Matías R."
-              value={seller}
-              onChange={(event) => setSeller(event.currentTarget.value)}
-            />
-            <Select
-              label="Turno"
-              data={SHIFT_TYPES.map((item) => ({ value: item.value, label: item.label }))}
-              value={shiftType}
-              onChange={(value) => setShiftType((value as ShiftType) ?? "dia")}
-            />
-            <NumberInput
-              label="Efectivo inicial"
-              placeholder="Ej: 50000"
-              description="Monto de efectivo con el que inicia el turno"
-              value={initialCash ?? undefined}
-              onChange={(value) => {
-                if (value === "" || value === null) {
-                  setInitialCash(undefined);
-                  return;
-                }
-                const parsed = typeof value === "number" ? value : Number(value);
-                setInitialCash(Number.isFinite(parsed) ? parsed : undefined);
-              }}
-              min={0}
-              thousandSeparator="."
-              decimalSeparator=","
-            />
-            <Badge color="teal" variant="light">
-              Mantén el control en tiempo real del efectivo durante el turno.
-            </Badge>
-            <Group justify="flex-end">
-              <Button variant="default" onClick={onClose}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => {
-                  if (!seller.trim()) {
-                    notifications.show({
-                      title: "Campos incompletos",
-                      message: "Ingresa el nombre del responsable del turno.",
-                      color: "orange"
-                    });
-                    return;
-                  }
-                  const initialCashValue = typeof initialCash === "number" && Number.isFinite(initialCash) ? initialCash : undefined;
-                  if (initialCashValue === undefined) {
-                    notifications.show({
-                      title: "Campos incompletos",
-                      message: "Ingresa el efectivo inicial del turno.",
-                      color: "orange"
-                    });
-                    return;
-                  }
-                  onOpenShift({ seller: seller.trim(), type: shiftType, initialCash: initialCashValue });
-                }}
-                leftSection={<Clock3 size={18} />}
-              >
-                Abrir turno
-              </Button>
-            </Group>
-          </>
-        ) : (
-          <>
-            <Stack gap="sm">
-              <Badge color="violet" variant="light">
-                Resumen del turno
+  if (mode === "close") {
+    return (
+      <Modal
+        opened={opened}
+        onClose={onClose}
+        title=""
+        centered
+        size="95vw"
+        fullScreen
+        styles={{
+          body: { padding: 0, height: "100vh", overflow: "hidden" },
+          content: { height: "100vh" },
+          header: { display: "none" }
+        }}
+      >
+        <Stack gap={0} style={{ height: "100vh", background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}>
+          {/* Header */}
+          <Paper
+            p="xl"
+            style={{
+              background: "rgba(255, 255, 255, 0.95)",
+              borderRadius: 0,
+              borderBottom: "4px solid #667eea"
+            }}
+          >
+            <Group justify="space-between" align="center">
+              <Stack gap={4}>
+                <Title order={2} style={{ color: "#667eea" }}>
+                  🎯 Cierre de Turno
+                </Title>
+                <Text size="sm" c="dimmed">
+                  {activeShift?.seller} • {activeShift?.type === "dia" ? "Turno Diurno" : "Turno Nocturno"}
+                </Text>
+              </Stack>
+              <Badge size="xl" variant="gradient" gradient={{ from: "teal", to: "blue" }}>
+                {summary.tickets} Tickets Emitidos
               </Badge>
-              <Group justify="space-between">
-                <Text>Total ventas</Text>
-                <Text fw={700}>{formatCurrency(summary.total)}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text>Tickets emitidos</Text>
-                <Text fw={700}>{summary.tickets}</Text>
-              </Group>
-              <Divider />
-              <Stack gap="xs">
-                {summary.byPayment && Object.entries(summary.byPayment).map(([key, value]) => (
-                  <Group key={key} justify="space-between">
-                    <Text c="dimmed">{key.toUpperCase()}</Text>
-                    <Text fw={600}>{formatCurrency(value ?? 0)}</Text>
-                  </Group>
-                ))}
-              </Stack>
-            </Stack>
-            <NumberInput
-              label="Conteo final de efectivo"
-              placeholder="Ej: 120000"
-              value={cashCounted ?? undefined}
-              onChange={(value) => {
-                if (value === "" || value === null) {
-                  setCashCounted(undefined);
-                  return;
-                }
-                const parsed = typeof value === "number" ? value : Number(value);
-                setCashCounted(Number.isFinite(parsed) ? parsed : undefined);
-              }}
-              min={0}
-              thousandSeparator="."
-              decimalSeparator=","
-            />
-            <Paper withBorder p="md" radius="md">
-              <Stack gap="xs">
-                <Group justify="space-between">
-                  <Text>Efectivo esperado</Text>
-                  <Text fw={600}>{formatCurrency(summary.cashExpected)}</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text>Diferencia</Text>
-                  <Text fw={600} c={countedValue !== undefined && countedValue - summary.cashExpected !== 0 ? (countedValue - summary.cashExpected > 0 ? "teal" : "red") : undefined}>
-                    {formatCurrency(countedValue !== undefined ? countedValue - summary.cashExpected : 0)}
-                  </Text>
-                </Group>
-              </Stack>
-            </Paper>
-            <Group justify="flex-end">
-              <Button variant="default" onClick={onClose}>
+            </Group>
+          </Paper>
+
+          {/* Content Area */}
+          <Box style={{ flex: 1, overflow: "hidden", padding: "1.5rem" }}>
+            <Grid gutter="lg" style={{ height: "100%" }}>
+              {/* Left Column - KPIs and Payment Summary */}
+              <Grid.Col span={4} style={{ display: "flex", flexDirection: "column", gap: "1rem", height: "100%" }}>
+                {/* KPIs */}
+                <Card withBorder radius="lg" shadow="xl" style={{ flex: "0 0 auto" }}>
+                  <Stack gap="md">
+                    <Text fw={700} size="lg" c="dimmed">RESUMEN FINANCIERO</Text>
+                    <Divider />
+
+                    <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.1))" }}>
+                      <Stack gap="xs">
+                        <Text size="xs" c="dimmed" fw={600}>TOTAL VENTAS</Text>
+                        <Text fw={700} size="32px" c="teal">{formatCurrency(summary.total)}</Text>
+                      </Stack>
+                    </Paper>
+
+                    <SimpleGrid cols={2} spacing="xs">
+                      <Paper withBorder p="sm" radius="md">
+                        <Stack gap={4}>
+                          <Text size="xs" c="dimmed">Ticket Promedio</Text>
+                          <Text fw={700}>{summary.tickets > 0 ? formatCurrency(summary.total / summary.tickets) : "$0"}</Text>
+                        </Stack>
+                      </Paper>
+                      <Paper withBorder p="sm" radius="md">
+                        <Stack gap={4}>
+                          <Text size="xs" c="dimmed">Total Tickets</Text>
+                          <Text fw={700}>{summary.tickets}</Text>
+                        </Stack>
+                      </Paper>
+                    </SimpleGrid>
+                  </Stack>
+                </Card>
+
+                {/* Payment Methods */}
+                <Card withBorder radius="lg" shadow="xl" style={{ flex: "1 1 auto", overflow: "auto" }}>
+                  <Stack gap="md">
+                    <Text fw={700} size="lg" c="dimmed">MÉTODOS DE PAGO</Text>
+                    <Divider />
+
+                    {Object.entries(summary.byPayment).map(([method, amount]) => {
+                      const percentage = summary.total > 0 ? (amount / summary.total * 100).toFixed(1) : "0";
+                      return (
+                        <Paper key={method} withBorder p="md" radius="md">
+                          <Group justify="space-between" mb="xs">
+                            <Text fw={600} tt="uppercase">{method}</Text>
+                            <Badge size="lg" variant="light">{percentage}%</Badge>
+                          </Group>
+                          <Text fw={700} size="xl">{formatCurrency(amount)}</Text>
+                          <Progress
+                            value={parseFloat(percentage)}
+                            size="sm"
+                            radius="xl"
+                            mt="xs"
+                            styles={{ section: { background: "linear-gradient(90deg, #667eea, #764ba2)" } }}
+                          />
+                        </Paper>
+                      );
+                    })}
+                  </Stack>
+                </Card>
+
+                {/* Cash Input */}
+                <Card withBorder radius="lg" shadow="xl" style={{ flex: "0 0 auto" }}>
+                  <Stack gap="md">
+                    <Text fw={700} size="lg" c="dimmed">ARQUEO DE CAJA</Text>
+                    <Divider />
+
+                    <NumberInput
+                      label="Efectivo Contado"
+                      placeholder="Ingresa el efectivo real en caja"
+                      size="lg"
+                      value={cashCounted ?? undefined}
+                      onChange={(value) => {
+                        if (value === "" || value === null) {
+                          setCashCounted(undefined);
+                          return;
+                        }
+                        const parsed = typeof value === "number" ? value : Number(value);
+                        setCashCounted(Number.isFinite(parsed) ? parsed : undefined);
+                      }}
+                      min={0}
+                      thousandSeparator="."
+                      decimalSeparator=","
+                      styles={{
+                        input: {
+                          fontSize: "1.5rem",
+                          fontWeight: 700,
+                          textAlign: "right"
+                        }
+                      }}
+                    />
+
+                    <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))" }}>
+                      <Stack gap="xs">
+                        <Group justify="space-between">
+                          <Text size="sm" c="dimmed">Efectivo Esperado</Text>
+                          <Text fw={700}>{formatCurrency(summary.cashExpected)}</Text>
+                        </Group>
+                        <Divider />
+                        <Group justify="space-between">
+                          <Text fw={700}>Diferencia</Text>
+                          <Text
+                            fw={700}
+                            size="xl"
+                            c={countedValue !== undefined && countedValue - summary.cashExpected !== 0
+                              ? (countedValue - summary.cashExpected > 0 ? "teal" : "red")
+                              : undefined}
+                          >
+                            {countedValue !== undefined
+                              ? formatCurrency(countedValue - summary.cashExpected)
+                              : "$0"}
+                          </Text>
+                        </Group>
+                      </Stack>
+                    </Paper>
+                  </Stack>
+                </Card>
+              </Grid.Col>
+
+              {/* Right Column - Products Table */}
+              <Grid.Col span={8} style={{ height: "100%" }}>
+                <Card withBorder radius="lg" shadow="xl" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                  <Stack gap="md" style={{ height: "100%", overflow: "hidden" }}>
+                    <Group justify="space-between">
+                      <Text fw={700} size="lg" c="dimmed">PRODUCTOS VENDIDOS</Text>
+                      <Badge size="lg" variant="gradient" gradient={{ from: "violet", to: "grape" }}>
+                        {shiftProducts.length} Productos
+                      </Badge>
+                    </Group>
+                    <Divider />
+
+                    <Box style={{ flex: 1, overflow: "auto", maxHeight: "calc(100vh - 400px)" }}>
+                      <Table highlightOnHover withTableBorder withColumnBorders>
+                        <Table.Thead style={{ position: "sticky", top: 0, background: "white", zIndex: 1 }}>
+                          <Table.Tr>
+                            <Table.Th style={{ width: "60%" }}>
+                              <Text fw={700} size="sm">Producto</Text>
+                            </Table.Th>
+                            <Table.Th style={{ textAlign: "center", width: "15%" }}>
+                              <Text fw={700} size="sm">Cantidad</Text>
+                            </Table.Th>
+                            <Table.Th style={{ textAlign: "right", width: "25%" }}>
+                              <Text fw={700} size="sm">Total</Text>
+                            </Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {shiftProducts.length === 0 ? (
+                            <Table.Tr>
+                              <Table.Td colSpan={3} style={{ textAlign: "center", padding: "2rem" }}>
+                                <Text c="dimmed">No hay productos vendidos en este turno</Text>
+                              </Table.Td>
+                            </Table.Tr>
+                          ) : (
+                            shiftProducts.map((product, index) => (
+                              <Table.Tr key={index}>
+                                <Table.Td>
+                                  <Text fw={600}>{product.name}</Text>
+                                </Table.Td>
+                                <Table.Td style={{ textAlign: "center" }}>
+                                  <Badge size="lg" variant="light" color="blue">
+                                    {product.quantity}
+                                  </Badge>
+                                </Table.Td>
+                                <Table.Td style={{ textAlign: "right" }}>
+                                  <Text fw={700} size="lg">{formatCurrency(product.total)}</Text>
+                                </Table.Td>
+                              </Table.Tr>
+                            ))
+                          )}
+                        </Table.Tbody>
+                      </Table>
+                    </Box>
+                  </Stack>
+                </Card>
+              </Grid.Col>
+            </Grid>
+          </Box>
+
+          {/* Footer Actions */}
+          <Paper
+            p="xl"
+            style={{
+              background: "rgba(255, 255, 255, 0.95)",
+              borderRadius: 0,
+              borderTop: "4px solid #667eea"
+            }}
+          >
+            <Group justify="space-between">
+              <Button
+                size="lg"
+                variant="light"
+                onClick={onClose}
+                leftSection={<ArrowLeftRight size={20} />}
+              >
                 Cancelar
               </Button>
               <Button
-                color="teal"
-                leftSection={<RefreshCcw size={18} />}
+                size="lg"
+                variant="gradient"
+                gradient={{ from: "teal", to: "blue", deg: 90 }}
+                leftSection={<BadgeCheck size={20} />}
                 onClick={() => {
                   if (countedValue === undefined) {
                     notifications.show({
@@ -723,12 +867,83 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary 
                   }
                   onCloseShift({ cashCounted: countedValue });
                 }}
+                style={{ minWidth: "200px" }}
               >
-                Cerrar turno
+                Confirmar Cierre
               </Button>
             </Group>
-          </>
-        )}
+          </Paper>
+        </Stack>
+      </Modal>
+    );
+  }
+
+  // Modal de apertura (sin cambios)
+  return (
+    <Modal opened={opened} onClose={onClose} title="Apertura de turno" centered size="lg">
+      <Stack gap="lg">
+        <TextInput
+          label="Nombre del vendedor"
+          placeholder="Ej: Matías R."
+          value={seller}
+          onChange={(event) => setSeller(event.currentTarget.value)}
+        />
+        <Select
+          label="Turno"
+          data={SHIFT_TYPES.map((item) => ({ value: item.value, label: item.label }))}
+          value={shiftType}
+          onChange={(value) => setShiftType((value as ShiftType) ?? "dia")}
+        />
+        <NumberInput
+          label="Efectivo inicial"
+          placeholder="Ej: 50000"
+          description="Monto de efectivo con el que inicia el turno"
+          value={initialCash ?? undefined}
+          onChange={(value) => {
+            if (value === "" || value === null) {
+              setInitialCash(undefined);
+              return;
+            }
+            const parsed = typeof value === "number" ? value : Number(value);
+            setInitialCash(Number.isFinite(parsed) ? parsed : undefined);
+          }}
+          min={0}
+          thousandSeparator="."
+          decimalSeparator=","
+        />
+        <Badge color="teal" variant="light">
+          Mantén el control en tiempo real del efectivo durante el turno.
+        </Badge>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => {
+              if (!seller.trim()) {
+                notifications.show({
+                  title: "Campos incompletos",
+                  message: "Ingresa el nombre del responsable del turno.",
+                  color: "orange"
+                });
+                return;
+              }
+              const initialCashValue = typeof initialCash === "number" && Number.isFinite(initialCash) ? initialCash : undefined;
+              if (initialCashValue === undefined) {
+                notifications.show({
+                  title: "Campos incompletos",
+                  message: "Ingresa el efectivo inicial del turno.",
+                  color: "orange"
+                });
+                return;
+              }
+              onOpenShift({ seller: seller.trim(), type: shiftType, initialCash: initialCashValue });
+            }}
+            leftSection={<Clock3 size={18} />}
+          >
+            Abrir turno
+          </Button>
+        </Group>
       </Stack>
     </Modal>
   );
@@ -3009,6 +3224,9 @@ const App = () => {
         onOpenShift={handleOpenShift}
         onCloseShift={handleCloseShift}
         summary={{ ...shiftSummary, cashExpected: (activeShift?.initial_cash ?? 0) + (shiftSummary.byPayment.cash ?? 0) }}
+        activeShift={activeShift}
+        sales={sales}
+        products={products}
       />
 
       <ClientModal
