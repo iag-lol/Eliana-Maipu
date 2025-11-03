@@ -617,209 +617,174 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
       <Modal
         opened={opened}
         onClose={onClose}
-        title=""
+        title="Cierre de turno"
         centered
-        size="95vw"
-        fullScreen
+        size="xl"
         styles={{
-          body: { padding: 0, height: "100vh", overflow: "hidden" },
-          content: { height: "100vh" },
-          header: { display: "none" }
+          body: { padding: 0 },
+          content: { maxHeight: "90vh" }
         }}
       >
-        <Stack gap={0} style={{ height: "100vh", background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}>
-          {/* Header */}
-          <Paper
-            p="xl"
-            style={{
-              background: "rgba(255, 255, 255, 0.95)",
-              borderRadius: 0,
-              borderBottom: "4px solid #667eea"
-            }}
-          >
-            <Group justify="space-between" align="center">
+        <Stack gap={0}>
+          {/* Header con información del turno */}
+          <Paper p="lg" withBorder radius={0} style={{ background: "linear-gradient(135deg, rgba(66, 99, 235, 0.12), rgba(99, 102, 241, 0.18))", borderBottom: "2px solid #e9ecef" }}>
+            <Group justify="space-between" align="flex-start">
               <Stack gap={4}>
-                <Title order={2} style={{ color: "#667eea" }}>
-                  🎯 Cierre de Turno
-                </Title>
+                <Group gap="xs">
+                  <BadgeCheck size={24} color="#4263eb" />
+                  <Title order={3} c="dark">{activeShift?.seller}</Title>
+                </Group>
                 <Text size="sm" c="dimmed">
-                  {activeShift?.seller} • {activeShift?.type === "dia" ? "Turno Diurno" : "Turno Nocturno"}
+                  {activeShift?.type === "dia" ? "Turno Diurno" : "Turno Nocturno"} • {formatDateTime(activeShift?.start ?? "")}
                 </Text>
               </Stack>
-              <Badge size="xl" variant="gradient" gradient={{ from: "teal", to: "blue" }}>
-                {summary.tickets} Tickets Emitidos
+              <Badge size="xl" variant="light" color="indigo">
+                {summary.tickets} Tickets
               </Badge>
             </Group>
           </Paper>
 
-          {/* Content Area */}
-          <Box style={{ flex: 1, overflow: "hidden", padding: "1.5rem" }}>
-            <Grid gutter="lg" style={{ height: "100%" }}>
-              {/* Left Column - KPIs and Payment Summary */}
-              <Grid.Col span={4} style={{ display: "flex", flexDirection: "column", gap: "1rem", height: "100%" }}>
-                {/* KPIs */}
-                <Card withBorder radius="lg" shadow="xl" style={{ flex: "0 0 auto" }}>
-                  <Stack gap="md">
-                    <Text fw={700} size="lg" c="dimmed">RESUMEN FINANCIERO</Text>
-                    <Divider />
+          {/* Resumen financiero en 3 tarjetas horizontales */}
+          <Paper p="lg" style={{ borderBottom: "2px solid #f1f3f5" }}>
+            <SimpleGrid cols={3} spacing="md">
+              <Paper withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.12))" }}>
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed" fw={600} tt="uppercase">Total Ventas</Text>
+                  <Text fw={700} size="28px" c="teal">{formatCurrency(summary.total)}</Text>
+                </Stack>
+              </Paper>
+              <Paper withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(59,130,246,0.12))" }}>
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed" fw={600} tt="uppercase">Ticket Promedio</Text>
+                  <Text fw={700} size="28px" c="blue">{summary.tickets > 0 ? formatCurrency(summary.total / summary.tickets) : "$0"}</Text>
+                </Stack>
+              </Paper>
+              <Paper withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(168,85,247,0.08), rgba(168,85,247,0.12))" }}>
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed" fw={600} tt="uppercase">Total Tickets</Text>
+                  <Text fw={700} size="28px" c="violet">{summary.tickets}</Text>
+                </Stack>
+              </Paper>
+            </SimpleGrid>
+          </Paper>
 
-                    <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.1))" }}>
-                      <Stack gap="xs">
-                        <Text size="xs" c="dimmed" fw={600}>TOTAL VENTAS</Text>
-                        <Text fw={700} size="32px" c="teal">{formatCurrency(summary.total)}</Text>
-                      </Stack>
-                    </Paper>
-
-                    <SimpleGrid cols={2} spacing="xs">
-                      <Paper withBorder p="sm" radius="md">
-                        <Stack gap={4}>
-                          <Text size="xs" c="dimmed">Ticket Promedio</Text>
-                          <Text fw={700}>{summary.tickets > 0 ? formatCurrency(summary.total / summary.tickets) : "$0"}</Text>
-                        </Stack>
-                      </Paper>
-                      <Paper withBorder p="sm" radius="md">
-                        <Stack gap={4}>
-                          <Text size="xs" c="dimmed">Total Tickets</Text>
-                          <Text fw={700}>{summary.tickets}</Text>
-                        </Stack>
-                      </Paper>
-                    </SimpleGrid>
-                  </Stack>
-                </Card>
-
-                {/* Payment Methods */}
-                <Card withBorder radius="lg" shadow="xl" style={{ flex: "1 1 auto", overflow: "auto" }}>
-                  <Stack gap="md">
-                    <Text fw={700} size="lg" c="dimmed">MÉTODOS DE PAGO</Text>
-                    <Divider />
-
-                    {Object.entries(summary.byPayment).map(([method, amount]) => {
-                      const percentage = summary.total > 0 ? (amount / summary.total * 100).toFixed(1) : "0";
-                      return (
-                        <Paper key={method} withBorder p="md" radius="md">
-                          <Group justify="space-between" mb="xs">
-                            <Text fw={600} tt="uppercase">{method}</Text>
-                            <Badge size="lg" variant="light">{percentage}%</Badge>
+          {/* Contenido principal en 2 columnas */}
+          <Box p="lg" style={{ maxHeight: "50vh", overflow: "auto" }}>
+            <Grid gutter="md">
+              {/* Columna izquierda - Métodos de pago y Arqueo */}
+              <Grid.Col span={5}>
+                <Stack gap="md">
+                  {/* Métodos de pago */}
+                  <Card withBorder radius="lg" shadow="sm">
+                    <Stack gap="sm">
+                      <Text fw={700} size="sm" c="dimmed" tt="uppercase">Métodos de Pago</Text>
+                      <Divider />
+                      {Object.entries(summary.byPayment).map(([method, amount]) => {
+                        const percentage = summary.total > 0 ? (amount / summary.total * 100).toFixed(0) : "0";
+                        return (
+                          <Group key={method} justify="space-between">
+                            <Group gap="xs">
+                              <Badge size="sm" variant="dot" color="indigo">{method.toUpperCase()}</Badge>
+                              <Text size="sm" c="dimmed">{percentage}%</Text>
+                            </Group>
+                            <Text fw={700}>{formatCurrency(amount)}</Text>
                           </Group>
-                          <Text fw={700} size="xl">{formatCurrency(amount)}</Text>
-                          <Progress
-                            value={parseFloat(percentage)}
-                            size="sm"
-                            radius="xl"
-                            mt="xs"
-                            styles={{ section: { background: "linear-gradient(90deg, #667eea, #764ba2)" } }}
-                          />
-                        </Paper>
-                      );
-                    })}
-                  </Stack>
-                </Card>
+                        );
+                      })}
+                    </Stack>
+                  </Card>
 
-                {/* Cash Input */}
-                <Card withBorder radius="lg" shadow="xl" style={{ flex: "0 0 auto" }}>
-                  <Stack gap="md">
-                    <Text fw={700} size="lg" c="dimmed">ARQUEO DE CAJA</Text>
-                    <Divider />
+                  {/* Arqueo de caja */}
+                  <Card withBorder radius="lg" shadow="sm">
+                    <Stack gap="md">
+                      <Text fw={700} size="sm" c="dimmed" tt="uppercase">Arqueo de Caja</Text>
+                      <Divider />
 
-                    <NumberInput
-                      label="Efectivo Contado"
-                      placeholder="Ingresa el efectivo real en caja"
-                      size="lg"
-                      value={cashCounted ?? undefined}
-                      onChange={(value) => {
-                        if (value === "" || value === null) {
-                          setCashCounted(undefined);
-                          return;
-                        }
-                        const parsed = typeof value === "number" ? value : Number(value);
-                        setCashCounted(Number.isFinite(parsed) ? parsed : undefined);
-                      }}
-                      min={0}
-                      thousandSeparator="."
-                      decimalSeparator=","
-                      styles={{
-                        input: {
-                          fontSize: "1.5rem",
-                          fontWeight: 700,
-                          textAlign: "right"
-                        }
-                      }}
-                    />
+                      <NumberInput
+                        label="Efectivo Contado"
+                        placeholder="Ingresa el monto contado"
+                        value={cashCounted ?? undefined}
+                        onChange={(value) => {
+                          if (value === "" || value === null) {
+                            setCashCounted(undefined);
+                            return;
+                          }
+                          const parsed = typeof value === "number" ? value : Number(value);
+                          setCashCounted(Number.isFinite(parsed) ? parsed : undefined);
+                        }}
+                        min={0}
+                        thousandSeparator="."
+                        decimalSeparator=","
+                        size="md"
+                      />
 
-                    <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))" }}>
-                      <Stack gap="xs">
-                        <Group justify="space-between">
-                          <Text size="sm" c="dimmed">Efectivo Esperado</Text>
-                          <Text fw={700}>{formatCurrency(summary.cashExpected)}</Text>
-                        </Group>
-                        <Divider />
-                        <Group justify="space-between">
-                          <Text fw={700}>Diferencia</Text>
-                          <Text
-                            fw={700}
-                            size="xl"
-                            c={countedValue !== undefined && countedValue - summary.cashExpected !== 0
-                              ? (countedValue - summary.cashExpected > 0 ? "teal" : "red")
-                              : undefined}
-                          >
-                            {countedValue !== undefined
-                              ? formatCurrency(countedValue - summary.cashExpected)
-                              : "$0"}
-                          </Text>
-                        </Group>
-                      </Stack>
-                    </Paper>
-                  </Stack>
-                </Card>
+                      <Paper withBorder p="sm" radius="md" style={{ background: "rgba(99,102,241,0.05)" }}>
+                        <Stack gap="xs">
+                          <Group justify="space-between">
+                            <Text size="sm" c="dimmed">Efectivo Esperado</Text>
+                            <Text fw={600}>{formatCurrency(summary.cashExpected)}</Text>
+                          </Group>
+                          <Divider />
+                          <Group justify="space-between">
+                            <Text fw={600}>Diferencia</Text>
+                            <Text
+                              fw={700}
+                              size="lg"
+                              c={countedValue !== undefined && countedValue - summary.cashExpected !== 0
+                                ? (countedValue - summary.cashExpected > 0 ? "teal" : "red")
+                                : undefined}
+                            >
+                              {countedValue !== undefined
+                                ? formatCurrency(countedValue - summary.cashExpected)
+                                : "$0"}
+                            </Text>
+                          </Group>
+                        </Stack>
+                      </Paper>
+                    </Stack>
+                  </Card>
+                </Stack>
               </Grid.Col>
 
-              {/* Right Column - Products Table */}
-              <Grid.Col span={8} style={{ height: "100%" }}>
-                <Card withBorder radius="lg" shadow="xl" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                  <Stack gap="md" style={{ height: "100%", overflow: "hidden" }}>
+              {/* Columna derecha - Productos vendidos */}
+              <Grid.Col span={7}>
+                <Card withBorder radius="lg" shadow="sm" style={{ height: "100%" }}>
+                  <Stack gap="sm" style={{ height: "100%" }}>
                     <Group justify="space-between">
-                      <Text fw={700} size="lg" c="dimmed">PRODUCTOS VENDIDOS</Text>
-                      <Badge size="lg" variant="gradient" gradient={{ from: "violet", to: "grape" }}>
-                        {shiftProducts.length} Productos
-                      </Badge>
+                      <Text fw={700} size="sm" c="dimmed" tt="uppercase">Productos Vendidos</Text>
+                      <Badge variant="light" color="violet">{shiftProducts.length} productos</Badge>
                     </Group>
                     <Divider />
 
-                    <Box style={{ flex: 1, overflow: "auto", maxHeight: "calc(100vh - 400px)" }}>
-                      <Table highlightOnHover withTableBorder withColumnBorders>
+                    <Box style={{ flex: 1, overflow: "auto", maxHeight: "380px" }}>
+                      <Table highlightOnHover withTableBorder>
                         <Table.Thead style={{ position: "sticky", top: 0, background: "white", zIndex: 1 }}>
                           <Table.Tr>
-                            <Table.Th style={{ width: "60%" }}>
-                              <Text fw={700} size="sm">Producto</Text>
-                            </Table.Th>
-                            <Table.Th style={{ textAlign: "center", width: "15%" }}>
-                              <Text fw={700} size="sm">Cantidad</Text>
-                            </Table.Th>
-                            <Table.Th style={{ textAlign: "right", width: "25%" }}>
-                              <Text fw={700} size="sm">Total</Text>
-                            </Table.Th>
+                            <Table.Th>Producto</Table.Th>
+                            <Table.Th style={{ textAlign: "center" }}>Cant.</Table.Th>
+                            <Table.Th style={{ textAlign: "right" }}>Total</Table.Th>
                           </Table.Tr>
                         </Table.Thead>
                         <Table.Tbody>
                           {shiftProducts.length === 0 ? (
                             <Table.Tr>
                               <Table.Td colSpan={3} style={{ textAlign: "center", padding: "2rem" }}>
-                                <Text c="dimmed">No hay productos vendidos en este turno</Text>
+                                <Text c="dimmed" size="sm">No hay productos vendidos</Text>
                               </Table.Td>
                             </Table.Tr>
                           ) : (
                             shiftProducts.map((product, index) => (
                               <Table.Tr key={index}>
                                 <Table.Td>
-                                  <Text fw={600}>{product.name}</Text>
+                                  <Text size="sm" fw={500}>{product.name}</Text>
                                 </Table.Td>
                                 <Table.Td style={{ textAlign: "center" }}>
-                                  <Badge size="lg" variant="light" color="blue">
+                                  <Badge size="md" variant="light" color="blue">
                                     {product.quantity}
                                   </Badge>
                                 </Table.Td>
                                 <Table.Td style={{ textAlign: "right" }}>
-                                  <Text fw={700} size="lg">{formatCurrency(product.total)}</Text>
+                                  <Text fw={600}>{formatCurrency(product.total)}</Text>
                                 </Table.Td>
                               </Table.Tr>
                             ))
@@ -833,29 +798,18 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
             </Grid>
           </Box>
 
-          {/* Footer Actions */}
-          <Paper
-            p="xl"
-            style={{
-              background: "rgba(255, 255, 255, 0.95)",
-              borderRadius: 0,
-              borderTop: "4px solid #667eea"
-            }}
-          >
-            <Group justify="space-between">
+          {/* Footer con acciones */}
+          <Paper p="lg" withBorder radius={0} style={{ background: "#f8f9fa", borderTop: "2px solid #e9ecef" }}>
+            <Group justify="flex-end" gap="md">
               <Button
-                size="lg"
-                variant="light"
+                variant="default"
                 onClick={onClose}
-                leftSection={<ArrowLeftRight size={20} />}
               >
                 Cancelar
               </Button>
               <Button
-                size="lg"
-                variant="gradient"
-                gradient={{ from: "teal", to: "blue", deg: 90 }}
-                leftSection={<BadgeCheck size={20} />}
+                color="teal"
+                leftSection={<BadgeCheck size={18} />}
                 onClick={() => {
                   if (countedValue === undefined) {
                     notifications.show({
@@ -867,9 +821,8 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
                   }
                   onCloseShift({ cashCounted: countedValue });
                 }}
-                style={{ minWidth: "200px" }}
               >
-                Confirmar Cierre
+                Confirmar Cierre de Turno
               </Button>
             </Group>
           </Paper>
