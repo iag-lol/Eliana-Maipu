@@ -1980,58 +1980,106 @@ const App = () => {
     [productMap]
   );
 
-  // Detector de escaneo de códigos de barras con pistola lectora
+  // Detector MEJORADO de escaneo de códigos de barras con pistola lectora
   useEffect(() => {
     if (activeTab !== "pos") return;
 
     let barcodeBuffer = "";
     let lastKeyTime = Date.now();
+    let resetTimeout: NodeJS.Timeout | null = null;
 
-    const handleKeyPress = (event: KeyboardEvent) => {
+    const processBarcode = (code: string) => {
+      const trimmedCode = code.trim();
+
+      console.log("🔍 Código escaneado:", trimmedCode);
+
+      if (trimmedCode.length === 0) return;
+
+      // Buscar producto por código de barras
+      const product = products.find((p) => p.barcode === trimmedCode);
+
+      if (product) {
+        console.log("✅ Producto encontrado:", product.name);
+        handleAddProductToCart(product.id);
+
+        notifications.show({
+          title: "✅ Producto escaneado",
+          message: `${product.name} agregado al carrito`,
+          color: "teal",
+          autoClose: 2000
+        });
+      } else {
+        console.log("❌ Producto NO encontrado para código:", trimmedCode);
+        notifications.show({
+          title: "⚠️ Código no encontrado",
+          message: `Código: ${trimmedCode}`,
+          color: "orange",
+          autoClose: 3000
+        });
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       const currentTime = Date.now();
       const timeDiff = currentTime - lastKeyTime;
 
-      // Si pasa más de 100ms entre teclas, reiniciar buffer (escritura manual)
-      if (timeDiff > 100) {
+      // Limpiar timeout anterior
+      if (resetTimeout) {
+        clearTimeout(resetTimeout);
+        resetTimeout = null;
+      }
+
+      // Si pasa más de 200ms entre teclas, reiniciar buffer (escritura manual)
+      if (timeDiff > 200) {
         barcodeBuffer = "";
       }
 
       lastKeyTime = currentTime;
 
       // Si es Enter, procesar el código escaneado
-      if (event.key === "Enter") {
-        event.preventDefault();
-
+      if (event.key === "Enter" || event.keyCode === 13) {
         const scannedCode = barcodeBuffer.trim();
-        if (scannedCode.length > 0) {
-          // Buscar producto por código de barras
-          const product = products.find((p) => p.barcode === scannedCode);
 
-          if (product) {
-            handleAddProductToCart(product.id);
-            setSearch(""); // Limpiar búsqueda
-          } else {
-            notifications.show({
-              title: "Producto no encontrado",
-              message: `No se encontró ningún producto con el código: ${scannedCode}`,
-              color: "orange"
-            });
-          }
+        // Solo procesar si el buffer tiene contenido
+        if (scannedCode.length > 0) {
+          // Prevenir submit de formularios
+          event.preventDefault();
+          event.stopPropagation();
+
+          processBarcode(scannedCode);
         }
 
         barcodeBuffer = "";
         return;
       }
 
-      // Ignorar teclas especiales
-      if (event.key.length > 1) return;
+      // Ignorar teclas especiales (excepto números y letras)
+      if (event.key.length > 1 && !event.key.match(/^[0-9]$/)) return;
 
       // Agregar carácter al buffer
-      barcodeBuffer += event.key;
+      const char = event.key;
+      if (char && char.length === 1) {
+        barcodeBuffer += char;
+
+        // Auto-reset después de 300ms de inactividad
+        resetTimeout = setTimeout(() => {
+          if (barcodeBuffer.length > 0) {
+            console.log("🔄 Buffer reseteado por timeout:", barcodeBuffer);
+          }
+          barcodeBuffer = "";
+        }, 300);
+      }
     };
 
-    window.addEventListener("keypress", handleKeyPress);
-    return () => window.removeEventListener("keypress", handleKeyPress);
+    // Escuchar en document para capturar TODOS los eventos
+    document.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
+      if (resetTimeout) {
+        clearTimeout(resetTimeout);
+      }
+    };
   }, [activeTab, products, handleAddProductToCart]);
 
   const handleUpdateCartQuantity = (productId: string, quantity: number) => {
