@@ -1638,6 +1638,133 @@ const FiadoPaymentModal = ({ opened, client, mode, onClose, onSubmit }: FiadoPay
   );
 };
 
+interface LowStockModalProps {
+  opened: boolean;
+  onClose: () => void;
+  products: Product[];
+}
+
+const LowStockModal = ({ opened, onClose, products }: LowStockModalProps) => {
+  const lowStockProducts = products.filter((p) => p.stock <= p.minStock);
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title="Productos con Stock Crítico"
+      size="xl"
+      centered
+    >
+      <Stack gap="lg">
+        <Paper withBorder p="md" radius="md" style={{ background: "linear-gradient(135deg, rgba(251,191,36,0.1), rgba(251,146,60,0.15))" }}>
+          <Group justify="space-between" align="center">
+            <Group gap="md">
+              <ThemeIcon size="lg" variant="gradient" gradient={{ from: "orange", to: "yellow" }} radius="md">
+                <AlertTriangle size={24} />
+              </ThemeIcon>
+              <Stack gap={2}>
+                <Text fw={700} size="lg">
+                  {lowStockProducts.length} producto{lowStockProducts.length !== 1 ? "s" : ""} requieren atención
+                </Text>
+                <Text size="sm" c="dimmed">
+                  Estos productos están por debajo del stock mínimo establecido
+                </Text>
+              </Stack>
+            </Group>
+            <Badge size="xl" color="orange" variant="filled">
+              Prioridad Alta
+            </Badge>
+          </Group>
+        </Paper>
+
+        {lowStockProducts.length === 0 ? (
+          <Paper withBorder p="xl" radius="lg">
+            <Stack align="center" gap="md">
+              <ThemeIcon size={80} radius="xl" variant="light" color="teal">
+                <BadgeCheck size={50} />
+              </ThemeIcon>
+              <Text fw={600} size="lg" c="dimmed" ta="center">
+                ¡Excelente! Todo el inventario está bajo control
+              </Text>
+              <Text size="sm" c="dimmed" ta="center">
+                No hay productos que requieran reposición en este momento
+              </Text>
+            </Stack>
+          </Paper>
+        ) : (
+          <ScrollArea h={450}>
+            <Table striped highlightOnHover withTableBorder withColumnBorders>
+              <Table.Thead>
+                <Table.Tr style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.08), rgba(59,130,246,0.12))" }}>
+                  <Table.Th style={{ fontWeight: 700 }}>Producto</Table.Th>
+                  <Table.Th style={{ fontWeight: 700 }}>Categoría</Table.Th>
+                  <Table.Th style={{ fontWeight: 700, textAlign: "center" }}>Stock Actual</Table.Th>
+                  <Table.Th style={{ fontWeight: 700, textAlign: "center" }}>Mínimo</Table.Th>
+                  <Table.Th style={{ fontWeight: 700, textAlign: "center" }}>Faltan</Table.Th>
+                  <Table.Th style={{ fontWeight: 700, textAlign: "center" }}>Estado</Table.Th>
+                  <Table.Th style={{ fontWeight: 700, textAlign: "right" }}>Precio</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {lowStockProducts.map((product) => {
+                  const deficit = product.minStock - product.stock;
+                  const isOutOfStock = product.stock === 0;
+
+                  return (
+                    <Table.Tr key={product.id} style={{ background: isOutOfStock ? "rgba(239, 68, 68, 0.05)" : undefined }}>
+                      <Table.Td>
+                        <Text fw={600} c={isOutOfStock ? "red" : "dark"}>
+                          {product.name}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" color="indigo" size="sm">
+                          {product.category}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "center" }}>
+                        <Text fw={700} c={isOutOfStock ? "red" : "orange"} size="lg">
+                          {product.stock}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "center" }}>
+                        <Text c="dimmed">{product.minStock}</Text>
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "center" }}>
+                        <Badge color={isOutOfStock ? "red" : "orange"} variant="filled">
+                          {deficit > 0 ? `+${deficit}` : deficit}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "center" }}>
+                        <Badge
+                          color={isOutOfStock ? "red" : "orange"}
+                          variant="dot"
+                          size="lg"
+                        >
+                          {isOutOfStock ? "Sin stock" : "Bajo"}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td style={{ textAlign: "right" }}>
+                        <Text fw={600}>{formatCurrency(product.price)}</Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        )}
+
+        <Group justify="flex-end">
+          <Button variant="light" color="gray" onClick={onClose}>
+            Cerrar
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+};
+
 const App = () => {
   const queryClient = useQueryClient();
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -1672,6 +1799,8 @@ const App = () => {
 
   const [shiftModalOpened, shiftModalHandlers] = useDisclosure(false);
   const [shiftModalMode, setShiftModalMode] = useState<"open" | "close">("open");
+
+  const [lowStockModalOpened, lowStockModalHandlers] = useDisclosure(false);
 
   const [returnDrawerOpened, returnDrawerHandlers] = useDisclosure(false);
   const [returnSaleId, setReturnSaleId] = useState<string | null>(null);
@@ -2857,15 +2986,38 @@ const App = () => {
                       </Text>
                     </Stack>
                   </Paper>
-                  <Paper withBorder radius="lg" p="md" style={{ background: "linear-gradient(135deg, rgba(251,191,36,0.14), rgba(251,146,60,0.18))" }}>
+                  <Paper
+                    withBorder
+                    radius="lg"
+                    p="md"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(251,191,36,0.14), rgba(251,146,60,0.18))",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease"
+                    }}
+                    onClick={() => lowStockModalHandlers.open()}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.boxShadow = "0 8px 20px rgba(251, 146, 60, 0.3)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = "";
+                    }}
+                  >
                     <Stack gap={4}>
-                      <Group gap="xs">
-                        <ThemeIcon variant="gradient" gradient={{ from: "orange", to: "yellow" }} radius="md">
-                          <AlertTriangle size={18} />
-                        </ThemeIcon>
-                        <Text size="sm" c="dimmed">
-                          Stock crítico
-                        </Text>
+                      <Group justify="space-between">
+                        <Group gap="xs">
+                          <ThemeIcon variant="gradient" gradient={{ from: "orange", to: "yellow" }} radius="md">
+                            <AlertTriangle size={18} />
+                          </ThemeIcon>
+                          <Text size="sm" c="dimmed">
+                            Stock crítico
+                          </Text>
+                        </Group>
+                        <ActionIcon variant="subtle" color="orange" size="sm">
+                          <Search size={16} />
+                        </ActionIcon>
                       </Group>
                       <Group justify="space-between" align="center">
                         <Text fw={700} fz="xl">
@@ -2876,7 +3028,7 @@ const App = () => {
                         </Badge>
                       </Group>
                       <Text size="xs" c="dimmed">
-                        Revisa inventario para reponer productos bajo el mínimo.
+                        Click para ver detalle de productos bajo stock mínimo.
                       </Text>
                     </Stack>
                   </Paper>
@@ -2979,39 +3131,6 @@ const App = () => {
                               })}
                             </SimpleGrid>
                           </ScrollArea>
-                        </Stack>
-                      </Card>
-                      <Card withBorder radius="lg">
-                        <Stack gap="md">
-                          <Group justify="space-between">
-                            <Title order={4}>Recordatorios críticos</Title>
-                            <ActionIcon variant="subtle" color="indigo" onClick={() => productQuery.refetch()}>
-                              <RefreshCcw size={18} />
-                            </ActionIcon>
-                          </Group>
-                          {lowStockProducts.length === 0 ? (
-                            <Paper withBorder p="lg" radius="md">
-                              <Text c="dimmed" ta="center">
-                                Inventario bajo control. No hay alertas activas.
-                              </Text>
-                            </Paper>
-                          ) : (
-                            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-                              {lowStockProducts.map((product) => (
-                                <Paper key={product.id} withBorder p="md" radius="md">
-                                  <Stack gap={4}>
-                                    <Text fw={600}>{product.name}</Text>
-                                    <Text size="sm" c="dimmed">
-                                      Stock actual: {product.stock} / Mínimo: {product.minStock}
-                                    </Text>
-                                    <Badge color="orange" variant="light">
-                                      Prioridad alta
-                                    </Badge>
-                                  </Stack>
-                                </Paper>
-                              ))}
-                            </SimpleGrid>
-                          )}
                         </Stack>
                       </Card>
                     </Stack>
@@ -3433,6 +3552,12 @@ const App = () => {
             handleCreateProduct(updates as ProductInput);
           }
         }}
+      />
+
+      <LowStockModal
+        opened={lowStockModalOpened}
+        onClose={lowStockModalHandlers.close}
+        products={products}
       />
     </AppShell>
   );
