@@ -54,6 +54,8 @@ import {
   BarChart3,
   BoxIcon,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Clock3,
   CreditCard,
@@ -382,105 +384,103 @@ const CustomerDisplay = ({
   change: number;
   paymentLabel: string;
 }) => (
-  <Grid gutter="xl" align="stretch">
-    <Grid.Col span={{ base: 12, md: 6 }}>
-      <Card
-        withBorder
-        shadow="xl"
-        radius="xl"
-        h="100%"
-        style={{
-          background: "linear-gradient(160deg, var(--mantine-color-indigo-6), var(--mantine-color-indigo-3))",
-          color: "white"
-        }}
-      >
-        <Stack gap="lg">
-          <Title order={2} c="white">
-            Negocio Eliana Maipú
-          </Title>
-          <Text c="white" size="lg">
-            ¡Gracias por tu preferencia! Revisa nuestras promociones destacadas del día:
-          </Text>
-          <Stack gap="sm" c="white">
-            <Group gap="sm">
-              <ThemeIcon color="white" variant="light" radius="xl">
-                <TrendingUp size={18} />
-              </ThemeIcon>
-              <Text fw={600}>2x $3.500 en bebidas seleccionadas</Text>
-            </Group>
-            <Group gap="sm">
-              <ThemeIcon color="white" variant="light" radius="xl">
-                <BoxIcon size={18} />
-              </ThemeIcon>
-              <Text fw={600}>15% de descuento en productos de limpieza</Text>
-            </Group>
-            <Group gap="sm">
-              <ThemeIcon color="white" variant="light" radius="xl">
-                <Waypoints size={18} />
-              </ThemeIcon>
-              <Text fw={600}>Panadería y lácteos frescos todos los días</Text>
+  <Stack h="100vh" justify="center" align="center" style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }} p="xl">
+    <Card
+      withBorder
+      shadow="2xl"
+      radius="xl"
+      w="90%"
+      maw={800}
+      style={{
+        maxHeight: "85vh",
+        display: "flex",
+        flexDirection: "column"
+      }}
+    >
+      <Stack gap="lg" h="100%">
+        {/* Header */}
+        <Paper withBorder p="lg" radius="lg" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))" }}>
+          <Stack gap="xs">
+            <Group justify="space-between" align="flex-start">
+              <div>
+                <Title order={2} c="indigo">Negocio Eliana Maipú</Title>
+                <Text size="sm" c="dimmed">¡Gracias por tu preferencia!</Text>
+              </div>
+              {paymentLabel !== "Fiado" && (
+                <Badge size="xl" variant="gradient" gradient={{ from: "indigo", to: "violet" }}>
+                  {paymentLabel}
+                </Badge>
+              )}
             </Group>
           </Stack>
-          <Badge size="lg" radius="xl" variant="light" color="white" maw={220}>
-            Atención personalizada y rápida
-          </Badge>
-        </Stack>
-      </Card>
-    </Grid.Col>
-    <Grid.Col span={{ base: 12, md: 6 }}>
-      <Card shadow="lg" withBorder radius="xl" h="100%">
-        <Stack gap="md">
-          <Group justify="space-between">
-            <Title order={3}>Detalle de tu compra</Title>
-            <Badge color="indigo" size="lg">
-              {paymentLabel}
-            </Badge>
-          </Group>
-          <Divider />
-          <Stack gap="sm" h={360} style={{ overflow: "auto" }}>
-            {cart.length === 0 ? (
-              <Paper withBorder p="xl" radius="lg">
-                <Text c="dimmed" ta="center">
-                  Aún no hay productos agregados.
+        </Paper>
+
+        {/* Lista de productos */}
+        <Stack gap="md" style={{ flex: 1, overflow: "auto" }}>
+          {cart.length === 0 ? (
+            <Paper withBorder p="xl" radius="lg" style={{ background: "rgba(99,102,241,0.05)" }}>
+              <Stack align="center" gap="md">
+                <ShoppingCart size={48} color="#6366f1" />
+                <Text c="dimmed" ta="center" size="lg">
+                  Esperando productos...
                 </Text>
-              </Paper>
-            ) : (
-              cart.map((item) => (
-                <Paper key={item.product.id} withBorder radius="lg" p="md">
-                  <Group justify="space-between" align="center">
-                    <div>
-                      <Text fw={600}>{item.product.name}</Text>
-                      <Text size="sm" c="dimmed">
-                        {item.quantity} x {formatCurrency(item.product.price)}
+              </Stack>
+            </Paper>
+          ) : (
+            cart.map((item, index) => (
+              <Paper key={item.product.id} withBorder radius="lg" p="lg" shadow="sm">
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                  <Stack gap={4} style={{ flex: 1 }}>
+                    <Group gap="xs">
+                      <Badge size="lg" variant="light" color="indigo" circle>
+                        {index + 1}
+                      </Badge>
+                      <Text fw={700} size="lg">
+                        {item.product.name}
                       </Text>
-                    </div>
-                    <Text fw={700}>{formatCurrency(item.subtotal)}</Text>
-                  </Group>
-                </Paper>
-              ))
-            )}
-          </Stack>
-          <Divider />
-          <Stack gap="sm">
-            <Group justify="space-between">
-              <Text c="dimmed">Total a pagar</Text>
-              <Text fw={700} size="lg">
+                    </Group>
+                    <Text size="md" c="dimmed">
+                      {item.quantity} × {formatCurrency(item.product.price)}
+                    </Text>
+                  </Stack>
+                  <Text fw={700} size="28px" c="indigo">
+                    {formatCurrency(item.subtotal)}
+                  </Text>
+                </Group>
+              </Paper>
+            ))
+          )}
+        </Stack>
+
+        {/* Total y cambio */}
+        <Paper withBorder p="xl" radius="lg" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.08))" }}>
+          <Stack gap="md">
+            <Group justify="space-between" align="center">
+              <Text size="xl" fw={600} c="dimmed">
+                TOTAL A PAGAR
+              </Text>
+              <Text fw={700} size="48px" c="teal">
                 {formatCurrency(total)}
               </Text>
             </Group>
-            {change >= 0 && (
-              <Group justify="space-between">
-                <Text c="dimmed">Cambio</Text>
-                <Text fw={600} color={change >= 0 ? "teal" : "red"}>
-                  {formatCurrency(change)}
-                </Text>
-              </Group>
+            {change > 0 && (
+              <>
+                <Divider />
+                <Group justify="space-between" align="center">
+                  <Text size="lg" fw={600} c="dimmed">
+                    Su cambio
+                  </Text>
+                  <Text fw={700} size="32px" c="blue">
+                    {formatCurrency(change)}
+                  </Text>
+                </Group>
+              </>
             )}
           </Stack>
-        </Stack>
-      </Card>
-    </Grid.Col>
-  </Grid>
+        </Paper>
+      </Stack>
+    </Card>
+  </Stack>
 );
 
 interface PasswordModalProps {
@@ -1556,6 +1556,7 @@ const App = () => {
   const [cashReceived, setCashReceived] = useState<number | undefined>(undefined);
   const [selectedFiadoClient, setSelectedFiadoClient] = useState<string | null>(null);
   const [customerDisplay, setCustomerDisplay] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [shiftModalOpened, shiftModalHandlers] = useDisclosure(false);
   const [shiftModalMode, setShiftModalMode] = useState<"open" | "close">("open");
@@ -2374,7 +2375,7 @@ const App = () => {
     <AppShell
       header={{ height: 72 }}
       navbar={{
-        width: 280,
+        width: sidebarCollapsed ? 80 : 280,
         breakpoint: "md",
         collapsed: { mobile: true }
       }}
@@ -2487,130 +2488,181 @@ const App = () => {
 
       <AppShell.Navbar p="md" className="sidebar-nav">
         <Stack gap="md">
-          <Paper withBorder radius="lg" p="md">
-            {activeShift ? (
-              <Stack gap="sm">
-                <Group justify="space-between" align="flex-start">
-                  <Stack gap={2}>
-                    <Text fw={700}>Turno activo</Text>
-                    <Text size="xs" c="dimmed">
-                      {activeShift.seller} • desde {formatDateTime(activeShift.start)}
+          {/* Botón de colapso */}
+          <Group justify={sidebarCollapsed ? "center" : "flex-end"}>
+            <ActionIcon
+              variant="light"
+              color="indigo"
+              size="lg"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            >
+              {sidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            </ActionIcon>
+          </Group>
+
+          {!sidebarCollapsed ? (
+            <>
+              <Paper withBorder radius="lg" p="md">
+                {activeShift ? (
+                  <Stack gap="sm">
+                    <Group justify="space-between" align="flex-start">
+                      <Stack gap={2}>
+                        <Text fw={700}>Turno activo</Text>
+                        <Text size="xs" c="dimmed">
+                          {activeShift.seller} • desde {formatDateTime(activeShift.start)}
+                        </Text>
+                      </Stack>
+                      <Badge color="teal" variant="light">
+                        {activeShift.type === "dia" ? "Día" : "Noche"}
+                      </Badge>
+                    </Group>
+                    <Divider />
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed">
+                        Total ventas
+                      </Text>
+                      <Text fw={700}>{formatCurrency(shiftSummary.total)}</Text>
+                    </Group>
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed">
+                        Tickets
+                      </Text>
+                      <Text fw={700}>{shiftSummary.tickets}</Text>
+                    </Group>
+                    <Divider />
+                    <Group justify="space-between">
+                      <Text size="sm" c="dimmed" fw={600}>
+                        Efectivo en caja
+                      </Text>
+                      <Text fw={700} c="teal">
+                        {formatCurrency((activeShift.initial_cash ?? 0) + (shiftSummary.byPayment.cash ?? 0))}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" pl="xs">
+                      Inicial: {formatCurrency(activeShift.initial_cash ?? 0)} + Ventas: {formatCurrency(shiftSummary.byPayment.cash ?? 0)}
+                    </Text>
+                    <Divider />
+                    {PAYMENT_ORDER.map((method) => (
+                      <Group key={method} justify="space-between">
+                        <Text size="xs" c="dimmed">
+                          {PAYMENT_LABELS[method].toUpperCase()}
+                        </Text>
+                        <Text fw={600}>{formatCurrency(shiftSummary.byPayment[method] ?? 0)}</Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                ) : (
+                  <Stack gap="xs">
+                    <Text fw={700}>Sin turno activo</Text>
+                    <Text size="sm" c="dimmed">
+                      Registra la apertura desde el encabezado para comenzar a mostrar indicadores.
                     </Text>
                   </Stack>
-                  <Badge color="teal" variant="light">
-                    {activeShift.type === "dia" ? "Día" : "Noche"}
-                  </Badge>
-                </Group>
-                <Divider />
-                <Group justify="space-between">
-                  <Text size="sm" c="dimmed">
-                    Total ventas
-                  </Text>
-                  <Text fw={700}>{formatCurrency(shiftSummary.total)}</Text>
-                </Group>
-                <Group justify="space-between">
-                  <Text size="sm" c="dimmed">
-                    Tickets
-                  </Text>
-                  <Text fw={700}>{shiftSummary.tickets}</Text>
-                </Group>
-                <Divider />
-                <Group justify="space-between">
-                  <Text size="sm" c="dimmed" fw={600}>
-                    Efectivo en caja
-                  </Text>
-                  <Text fw={700} c="teal">
-                    {formatCurrency((activeShift.initial_cash ?? 0) + (shiftSummary.byPayment.cash ?? 0))}
-                  </Text>
-                </Group>
-                <Text size="xs" c="dimmed" pl="xs">
-                  Inicial: {formatCurrency(activeShift.initial_cash ?? 0)} + Ventas: {formatCurrency(shiftSummary.byPayment.cash ?? 0)}
-                </Text>
-                <Divider />
-                {PAYMENT_ORDER.map((method) => (
-                  <Group key={method} justify="space-between">
-                    <Text size="xs" c="dimmed">
-                      {PAYMENT_LABELS[method].toUpperCase()}
-                    </Text>
-                    <Text fw={600}>{formatCurrency(shiftSummary.byPayment[method] ?? 0)}</Text>
-                  </Group>
-                ))}
-              </Stack>
-            ) : (
+                )}
+              </Paper>
+
               <Stack gap="xs">
-                <Text fw={700}>Sin turno activo</Text>
-                <Text size="sm" c="dimmed">
-                  Registra la apertura desde el encabezado para comenzar a mostrar indicadores.
-                </Text>
-              </Stack>
-            )}
-          </Paper>
+                {TABS.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  const disabled = !hasAccess(tab);
+                  const lowStockCount = tab.id === "inventory" ? products.filter((p) => p.stock <= p.minStock).length : 0;
 
-          <Stack gap="xs">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              const disabled = !hasAccess(tab);
-              const lowStockCount = tab.id === "inventory" ? products.filter((p) => p.stock <= p.minStock).length : 0;
-
-              return (
-                <div
-                  key={tab.id}
-                  className={`nav-item ${isActive ? "active" : ""}`}
-                  onClick={() => guardTabChange(tab.id)}
-                  style={{ opacity: disabled ? 0.55 : 1 }}
-                >
-                  <div className="nav-item-icon">
-                    <Icon size={22} />
-                  </div>
-                  <Text style={{ flex: 1 }}>{tab.label}</Text>
-                  {lowStockCount > 0 && !disabled && (
-                    <div className="nav-item-badge">
-                      {lowStockCount}
+                  return (
+                    <div
+                      key={tab.id}
+                      className={`nav-item ${isActive ? "active" : ""}`}
+                      onClick={() => guardTabChange(tab.id)}
+                      style={{ opacity: disabled ? 0.55 : 1 }}
+                    >
+                      <div className="nav-item-icon">
+                        <Icon size={22} />
+                      </div>
+                      <Text style={{ flex: 1 }}>{tab.label}</Text>
+                      {lowStockCount > 0 && !disabled && (
+                        <div className="nav-item-badge">
+                          {lowStockCount}
+                        </div>
+                      )}
+                      {disabled && (
+                        <Badge size="xs" color="gray" variant="dot">
+                          Bloqueado
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                  {disabled && (
-                    <Badge size="xs" color="gray" variant="dot">
-                      Bloqueado
-                    </Badge>
-                  )}
-                </div>
-              );
-            })}
-          </Stack>
+                  );
+                })}
+              </Stack>
 
-          <Paper withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(15, 23, 42, 0.08), rgba(99, 102, 241, 0.12))" }}>
-            <Stack gap="xs">
-              <Group gap="xs">
-                <ThemeIcon color="indigo" variant="light" size="md">
-                  <TrendingUp size={18} />
-                </ThemeIcon>
-                <Text size="sm" fw={700} style={{ color: "#1f2937" }}>
-                  Análisis en tiempo real
-                </Text>
-              </Group>
-              <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
-                Consulta métricas clave del turno y controla alertas de stock en un solo lugar.
-              </Text>
-            </Stack>
-          </Paper>
+              <Paper withBorder p="md" radius="lg" style={{ background: "linear-gradient(135deg, rgba(15, 23, 42, 0.08), rgba(99, 102, 241, 0.12))" }}>
+                <Stack gap="xs">
+                  <Group gap="xs">
+                    <ThemeIcon color="indigo" variant="light" size="md">
+                      <TrendingUp size={18} />
+                    </ThemeIcon>
+                    <Text size="sm" fw={700} style={{ color: "#1f2937" }}>
+                      Análisis en tiempo real
+                    </Text>
+                  </Group>
+                  <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
+                    Consulta métricas clave del turno y controla alertas de stock en un solo lugar.
+                  </Text>
+                </Stack>
+              </Paper>
 
-          {userRole ? (
-            <Button variant="light" color="yellow" onClick={handleLockAdmin}>
-              Cerrar sesión administrativa
-            </Button>
+              {userRole ? (
+                <Button variant="light" color="yellow" onClick={handleLockAdmin}>
+                  Cerrar sesión administrativa
+                </Button>
+              ) : (
+                <Button
+                  variant="gradient"
+                  gradient={{ from: "indigo", to: "blue", deg: 90 }}
+                  onClick={() => {
+                    setPendingTab(activeTab);
+                    passwordModalHandlers.open();
+                  }}
+                  leftSection={<ShieldCheck size={16} />}
+                >
+                  Desbloquear secciones
+                </Button>
+              )}
+            </>
           ) : (
-            <Button
-              variant="gradient"
-              gradient={{ from: "indigo", to: "blue", deg: 90 }}
-              onClick={() => {
-                setPendingTab(activeTab);
-                passwordModalHandlers.open();
-              }}
-              leftSection={<ShieldCheck size={16} />}
-            >
-              Desbloquear secciones
-            </Button>
+            // Vista colapsada - solo iconos
+            <Stack gap="xs">
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                const disabled = !hasAccess(tab);
+                const lowStockCount = tab.id === "inventory" ? products.filter((p) => p.stock <= p.minStock).length : 0;
+
+                return (
+                  <Tooltip key={tab.id} label={tab.label} position="right" withArrow>
+                    <ActionIcon
+                      size="xl"
+                      variant={isActive ? "filled" : "light"}
+                      color={isActive ? "indigo" : "gray"}
+                      onClick={() => guardTabChange(tab.id)}
+                      style={{ opacity: disabled ? 0.55 : 1, position: "relative" }}
+                    >
+                      <Icon size={24} />
+                      {lowStockCount > 0 && !disabled && (
+                        <Badge
+                          size="xs"
+                          color="red"
+                          variant="filled"
+                          circle
+                          style={{ position: "absolute", top: -4, right: -4 }}
+                        >
+                          {lowStockCount}
+                        </Badge>
+                      )}
+                    </ActionIcon>
+                  </Tooltip>
+                );
+              })}
+            </Stack>
           )}
         </Stack>
       </AppShell.Navbar>
