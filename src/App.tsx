@@ -31,7 +31,7 @@ import {
 } from "@mantine/core";
 import { Notifications, notifications } from "@mantine/notifications";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bar,
@@ -1947,35 +1947,92 @@ const App = () => {
     }
   };
 
-  const handleAddProductToCart = (productId: string) => {
-    const product = productMap.get(productId);
-    if (!product) return;
+  const handleAddProductToCart = useCallback(
+    (productId: string) => {
+      const product = productMap.get(productId);
+      if (!product) return;
 
-    setCart((prev) => {
-      const existing = prev.find((item) => item.productId === productId);
-      const newQuantity = (existing?.quantity ?? 0) + 1;
-      if (newQuantity > product.stock) {
-        notifications.show({
-          title: "Stock insuficiente",
-          message: `No quedan unidades suficientes de ${product.name}.`,
-          color: "red"
-        });
-        return prev;
-      }
-      if (existing) {
-        return prev.map((item) =>
-          item.productId === productId ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      }
-      return [...prev, { productId, quantity: 1 }];
-    });
+      setCart((prev) => {
+        const existing = prev.find((item) => item.productId === productId);
+        const newQuantity = (existing?.quantity ?? 0) + 1;
+        if (newQuantity > product.stock) {
+          notifications.show({
+            title: "Stock insuficiente",
+            message: `No quedan unidades suficientes de ${product.name}.`,
+            color: "red"
+          });
+          return prev;
+        }
+        if (existing) {
+          return prev.map((item) =>
+            item.productId === productId ? { ...item, quantity: item.quantity + 1 } : item
+          );
+        }
+        return [...prev, { productId, quantity: 1 }];
+      });
 
-    notifications.show({
-      title: "Producto agregado",
-      message: `${product.name} se agregó al carrito.`,
-      color: "teal"
-    });
-  };
+      notifications.show({
+        title: "Producto agregado",
+        message: `${product.name} se agregó al carrito.`,
+        color: "teal"
+      });
+    },
+    [productMap]
+  );
+
+  // Detector de escaneo de códigos de barras con pistola lectora
+  useEffect(() => {
+    if (activeTab !== "pos") return;
+
+    let barcodeBuffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleKeyPress = (event: KeyboardEvent) => {
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastKeyTime;
+
+      // Si pasa más de 100ms entre teclas, reiniciar buffer (escritura manual)
+      if (timeDiff > 100) {
+        barcodeBuffer = "";
+      }
+
+      lastKeyTime = currentTime;
+
+      // Si es Enter, procesar el código escaneado
+      if (event.key === "Enter") {
+        event.preventDefault();
+
+        const scannedCode = barcodeBuffer.trim();
+        if (scannedCode.length > 0) {
+          // Buscar producto por código de barras
+          const product = products.find((p) => p.barcode === scannedCode);
+
+          if (product) {
+            handleAddProductToCart(product.id);
+            setSearch(""); // Limpiar búsqueda
+          } else {
+            notifications.show({
+              title: "Producto no encontrado",
+              message: `No se encontró ningún producto con el código: ${scannedCode}`,
+              color: "orange"
+            });
+          }
+        }
+
+        barcodeBuffer = "";
+        return;
+      }
+
+      // Ignorar teclas especiales
+      if (event.key.length > 1) return;
+
+      // Agregar carácter al buffer
+      barcodeBuffer += event.key;
+    };
+
+    window.addEventListener("keypress", handleKeyPress);
+    return () => window.removeEventListener("keypress", handleKeyPress);
+  }, [activeTab, products, handleAddProductToCart]);
 
   const handleUpdateCartQuantity = (productId: string, quantity: number) => {
     const product = productMap.get(productId);
