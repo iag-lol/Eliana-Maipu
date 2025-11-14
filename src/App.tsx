@@ -384,66 +384,155 @@ const CustomerDisplay = ({
   change: number;
   paymentLabel: string;
 }) => (
-  <Stack h="100vh" justify="center" align="center" style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }} p="xl">
+  <Box
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100vw",
+      height: "100vh",
+      background: "linear-gradient(135deg, #f8fafc 0%, #e0e7ff 50%, #dbeafe 100%)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "2rem",
+      overflow: "hidden"
+    }}
+  >
     <Card
       withBorder
       shadow="2xl"
       radius="xl"
-      w="90%"
-      maw={800}
       style={{
-        maxHeight: "85vh",
+        width: "95%",
+        maxWidth: "1400px",
+        height: "92vh",
         display: "flex",
-        flexDirection: "column"
+        flexDirection: "column",
+        background: "white",
+        border: "2px solid rgba(99, 102, 241, 0.15)",
+        boxShadow: "0 25px 60px rgba(30, 58, 138, 0.2), 0 0 0 1px rgba(99, 102, 241, 0.1)"
       }}
     >
-      <Stack gap="lg" h="100%">
-        {/* Header */}
-        <Paper withBorder p="lg" radius="lg" style={{ background: "linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))" }}>
-          <Stack gap="xs">
-            <Group justify="space-between" align="flex-start">
-              <div>
-                <Title order={2} c="indigo">Negocio Eliana Maipú</Title>
-                <Text size="sm" c="dimmed">¡Gracias por tu preferencia!</Text>
-              </div>
-              {paymentLabel !== "Fiado" && (
-                <Badge size="xl" variant="gradient" gradient={{ from: "indigo", to: "violet" }}>
-                  {paymentLabel}
-                </Badge>
-              )}
-            </Group>
-          </Stack>
+      <Stack gap="xl" h="100%" p="xl">
+        {/* Header profesional */}
+        <Paper
+          withBorder
+          p="xl"
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%)",
+            border: "none"
+          }}
+        >
+          <Group justify="space-between" align="center" wrap="nowrap">
+            <Stack gap={4}>
+              <Title order={1} c="white" fw={800} size="42px">
+                Negocio Eliana Maipú
+              </Title>
+              <Text size="lg" c="rgba(255,255,255,0.85)" fw={500}>
+                ¡Gracias por tu preferencia!
+              </Text>
+            </Stack>
+            {paymentLabel !== "Fiado" && (
+              <Badge
+                size="xl"
+                variant="filled"
+                color="teal"
+                style={{
+                  padding: "1.2rem 2rem",
+                  fontSize: "1.25rem",
+                  fontWeight: 700,
+                  textTransform: "uppercase"
+                }}
+              >
+                {paymentLabel}
+              </Badge>
+            )}
+          </Group>
         </Paper>
 
-        {/* Lista de productos */}
-        <Stack gap="md" style={{ flex: 1, overflow: "auto" }}>
+        {/* Lista de productos con scroll */}
+        <Stack
+          gap="lg"
+          style={{
+            flex: 1,
+            overflow: "auto",
+            paddingRight: "0.5rem"
+          }}
+        >
           {cart.length === 0 ? (
-            <Paper withBorder p="xl" radius="lg" style={{ background: "rgba(99,102,241,0.05)" }}>
-              <Stack align="center" gap="md">
-                <ShoppingCart size={48} color="#6366f1" />
-                <Text c="dimmed" ta="center" size="lg">
+            <Paper
+              withBorder
+              p="3rem"
+              radius="xl"
+              style={{
+                background: "linear-gradient(135deg, rgba(99,102,241,0.05), rgba(59,130,246,0.08))",
+                border: "2px dashed rgba(99, 102, 241, 0.3)"
+              }}
+            >
+              <Stack align="center" gap="xl">
+                <ThemeIcon
+                  size={100}
+                  radius="xl"
+                  variant="gradient"
+                  gradient={{ from: "indigo", to: "blue" }}
+                >
+                  <ShoppingCart size={60} />
+                </ThemeIcon>
+                <Text c="dimmed" ta="center" size="xl" fw={600}>
                   Esperando productos...
                 </Text>
               </Stack>
             </Paper>
           ) : (
             cart.map((item, index) => (
-              <Paper key={item.product.id} withBorder radius="lg" p="lg" shadow="sm">
-                <Group justify="space-between" align="flex-start" wrap="nowrap">
-                  <Stack gap={4} style={{ flex: 1 }}>
-                    <Group gap="xs">
-                      <Badge size="lg" variant="light" color="indigo" circle>
-                        {index + 1}
-                      </Badge>
-                      <Text fw={700} size="lg">
+              <Paper
+                key={item.product.id}
+                withBorder
+                radius="lg"
+                p="xl"
+                shadow="md"
+                style={{
+                  background: "linear-gradient(135deg, rgba(255,255,255,0.9), rgba(245,247,250,0.95))",
+                  border: "1px solid rgba(99, 102, 241, 0.12)",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                <Group justify="space-between" align="center" wrap="nowrap" gap="xl">
+                  <Group gap="md" style={{ flex: 1 }}>
+                    <Badge
+                      size="xl"
+                      variant="filled"
+                      color="indigo"
+                      circle
+                      style={{
+                        minWidth: "48px",
+                        height: "48px",
+                        fontSize: "1.25rem",
+                        fontWeight: 700
+                      }}
+                    >
+                      {index + 1}
+                    </Badge>
+                    <Stack gap={4} style={{ flex: 1 }}>
+                      <Text fw={700} size="1.5rem" c="dark">
                         {item.product.name}
                       </Text>
-                    </Group>
-                    <Text size="md" c="dimmed">
-                      {item.quantity} × {formatCurrency(item.product.price)}
-                    </Text>
-                  </Stack>
-                  <Text fw={700} size="28px" c="indigo">
+                      <Text size="lg" c="dimmed" fw={500}>
+                        {item.quantity} unidad{item.quantity > 1 ? "es" : ""} × {formatCurrency(item.product.price)}
+                      </Text>
+                    </Stack>
+                  </Group>
+                  <Text
+                    fw={800}
+                    size="2.25rem"
+                    c="indigo"
+                    style={{
+                      textAlign: "right",
+                      minWidth: "180px"
+                    }}
+                  >
                     {formatCurrency(item.subtotal)}
                   </Text>
                 </Group>
@@ -452,25 +541,48 @@ const CustomerDisplay = ({
           )}
         </Stack>
 
-        {/* Total y cambio */}
-        <Paper withBorder p="xl" radius="lg" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.08))" }}>
-          <Stack gap="md">
+        {/* Total y cambio - área prominente */}
+        <Paper
+          withBorder
+          p="xl"
+          radius="lg"
+          style={{
+            background: "linear-gradient(135deg, rgba(20, 184, 166, 0.08), rgba(13, 148, 136, 0.12))",
+            border: "2px solid rgba(20, 184, 166, 0.25)"
+          }}
+        >
+          <Stack gap="lg">
             <Group justify="space-between" align="center">
-              <Text size="xl" fw={600} c="dimmed">
-                TOTAL A PAGAR
+              <Text size="2rem" fw={700} c="dark" tt="uppercase">
+                Total a Pagar
               </Text>
-              <Text fw={700} size="48px" c="teal">
+              <Text
+                fw={900}
+                size="4rem"
+                c="teal"
+                style={{
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1
+                }}
+              >
                 {formatCurrency(total)}
               </Text>
             </Group>
             {change > 0 && (
               <>
-                <Divider />
+                <Divider size="md" color="teal" opacity={0.3} />
                 <Group justify="space-between" align="center">
-                  <Text size="lg" fw={600} c="dimmed">
-                    Su cambio
+                  <Text size="1.5rem" fw={600} c="dimmed" tt="uppercase">
+                    Su Cambio
                   </Text>
-                  <Text fw={700} size="32px" c="blue">
+                  <Text
+                    fw={800}
+                    size="2.5rem"
+                    c="blue"
+                    style={{
+                      letterSpacing: "-0.02em"
+                    }}
+                  >
                     {formatCurrency(change)}
                   </Text>
                 </Group>
@@ -480,7 +592,7 @@ const CustomerDisplay = ({
         </Paper>
       </Stack>
     </Card>
-  </Stack>
+  </Box>
 );
 
 interface PasswordModalProps {
@@ -2371,6 +2483,21 @@ const App = () => {
 
   const currentTab = useMemo(() => TABS.find((tab) => tab.id === activeTab), [activeTab]);
 
+  // Si está en modo de pantalla para cliente, renderizar SOLO la ventana flotante
+  if (customerDisplay && activeTab === "pos") {
+    return (
+      <>
+        <Notifications position="top-right" />
+        <CustomerDisplay
+          cart={cartDetailed}
+          total={cartTotals.total}
+          change={cartTotals.change}
+          paymentLabel={paymentOption?.label ?? "Sin método"}
+        />
+      </>
+    );
+  }
+
   return (
     <AppShell
       header={{ height: 72 }}
@@ -2669,14 +2796,7 @@ const App = () => {
 
       <AppShell.Main style={{ paddingBottom: "180px" }}>
         <Notifications position="top-right" />
-        {!currentTab ? null : customerDisplay && activeTab === "pos" ? (
-          <CustomerDisplay
-            cart={cartDetailed}
-            total={cartTotals.total}
-            change={cartTotals.change}
-            paymentLabel={paymentOption?.label ?? "Sin método"}
-          />
-        ) : (
+        {!currentTab ? null : (
           <Stack gap="xl">
             {activeTab === "dashboard" && (
               <DashboardView
