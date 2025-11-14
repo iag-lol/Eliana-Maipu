@@ -3070,7 +3070,7 @@ const App = () => {
                               />
                             }
                           />
-                          <ScrollArea h={isMobile ? 400 : 520}>
+                          <ScrollArea h={isMobile ? 400 : 720}>
                             <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
                               {filteredProducts.map((product) => {
                                 const stockRatio = Math.min(
