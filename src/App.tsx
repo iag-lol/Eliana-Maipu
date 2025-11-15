@@ -1950,16 +1950,41 @@ const App = () => {
 
   const paymentOption = PAYMENT_OPTIONS.find((option) => option.id === selectedPayment);
 
+  // Calcular cantidad vendida por producto
+  const productSalesCount = useMemo(() => {
+    const salesMap = new Map<string, number>();
+    sales.forEach((sale) => {
+      if (sale.type === "sale") {
+        sale.items.forEach((item) => {
+          const current = salesMap.get(item.productId) || 0;
+          salesMap.set(item.productId, current + item.quantity);
+        });
+      }
+    });
+    return salesMap;
+  }, [sales]);
+
   const filteredProducts = useMemo(() => {
-    if (!search.trim()) return products;
-    const term = search.toLowerCase();
-    return products.filter(
-      (product) =>
-        product.name.toLowerCase().includes(term) ||
-        product.category.toLowerCase().includes(term) ||
-        (product.barcode && product.barcode.includes(term))
-    );
-  }, [products, search]);
+    let filtered = products;
+
+    // Filtrar por búsqueda si hay término
+    if (search.trim()) {
+      const term = search.toLowerCase();
+      filtered = products.filter(
+        (product) =>
+          product.name.toLowerCase().includes(term) ||
+          product.category.toLowerCase().includes(term) ||
+          (product.barcode && product.barcode.includes(term))
+      );
+    }
+
+    // Ordenar por cantidad vendida (mayor a menor)
+    return [...filtered].sort((a, b) => {
+      const salesA = productSalesCount.get(a.id) || 0;
+      const salesB = productSalesCount.get(b.id) || 0;
+      return salesB - salesA;
+    });
+  }, [products, search, productSalesCount]);
 
   const lowStockProducts = useMemo(() => products.filter((product) => product.stock <= product.minStock), [products]);
 
