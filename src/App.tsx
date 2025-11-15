@@ -78,6 +78,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   ShoppingCart,
+  Trash2,
   Sun,
   TrendingUp,
   User,
@@ -1379,6 +1380,54 @@ const EditProductModal = ({ opened, onClose, product, categories, onSave }: Edit
   );
 };
 
+interface DeleteProductModalProps {
+  opened: boolean;
+  product: Product | null;
+  onClose: () => void;
+  onConfirm: (productId: string) => void;
+}
+
+const DeleteProductModal = ({ opened, product, onClose, onConfirm }: DeleteProductModalProps) => (
+  <Modal opened={opened} onClose={onClose} title="Eliminar producto" centered size="sm">
+    <Stack gap="md">
+      <Text>
+        Esta acción eliminará{" "}
+        <Text span fw={700}>
+          {product?.name ?? "este producto"}
+        </Text>{" "}
+        del inventario y no se puede deshacer.
+      </Text>
+      {product && (
+        <Paper withBorder radius="md" p="sm">
+          <Stack gap={4}>
+            <Text size="sm" fw={600}>
+              {product.category}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Stock actual: {product.stock} • {formatCurrency(product.price)}
+            </Text>
+          </Stack>
+        </Paper>
+      )}
+      <Group justify="flex-end">
+        <Button variant="default" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button
+          color="red"
+          leftSection={<Trash2 size={18} />}
+          onClick={() => {
+            if (!product) return;
+            onConfirm(product.id);
+          }}
+        >
+          Eliminar
+        </Button>
+      </Group>
+    </Stack>
+  </Modal>
+);
+
 interface ReturnDrawerProps {
   opened: boolean;
   sales: Sale[];
@@ -1824,6 +1873,8 @@ const App = () => {
   const [editProductModalOpened, editProductModalHandlers] = useDisclosure(false);
   const [selectedProductForStock, setSelectedProductForStock] = useState<string | null>(null);
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
+  const [deleteProductModalOpened, deleteProductModalHandlers] = useDisclosure(false);
+  const [selectedProductForDelete, setSelectedProductForDelete] = useState<Product | null>(null);
 
   const [reportFilters, setReportFilters] = useState<ReportFilters>({ range: "today" });
   const [now, setNow] = useState(dayjs());
@@ -2437,6 +2488,32 @@ const App = () => {
     await queryClient.invalidateQueries({ queryKey: ["products"] });
     editProductModalHandlers.close();
     setSelectedProductForEdit(null);
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+
+    const { error } = await supabase.from("elianamaipu_products").delete().eq("id", productId);
+
+    if (error) {
+      notifications.show({
+        title: "No se pudo eliminar el producto",
+        message: error.message,
+        color: "red"
+      });
+      return;
+    }
+
+    notifications.show({
+      title: "Producto eliminado",
+      message: `${product.name} se eliminó del inventario.`,
+      color: "teal"
+    });
+
+    await queryClient.invalidateQueries({ queryKey: ["products"] });
+    deleteProductModalHandlers.close();
+    setSelectedProductForDelete(null);
   };
 
   const handleRegisterReturn = async () => {
@@ -3470,6 +3547,10 @@ const App = () => {
                   setSelectedProductForEdit(product);
                   editProductModalHandlers.open();
                 }}
+                onDeleteProduct={(product) => {
+                  setSelectedProductForDelete(product);
+                  deleteProductModalHandlers.open();
+                }}
               />
             )}
             {activeTab === "fiados" && (
@@ -3659,6 +3740,16 @@ const App = () => {
         }}
       />
 
+      <DeleteProductModal
+        opened={deleteProductModalOpened}
+        product={selectedProductForDelete}
+        onClose={() => {
+          deleteProductModalHandlers.close();
+          setSelectedProductForDelete(null);
+        }}
+        onConfirm={handleDeleteProduct}
+      />
+
       <LowStockModal
         opened={lowStockModalOpened}
         onClose={lowStockModalHandlers.close}
@@ -3691,6 +3782,7 @@ interface InventoryViewProps {
   onNewProduct: () => void;
   onAddStock: (productId: string) => void;
   onEditProduct: (product: Product) => void;
+  onDeleteProduct: (product: Product) => void;
 }
 
 const InventoryView = ({
@@ -3704,7 +3796,8 @@ const InventoryView = ({
   onRefresh,
   onNewProduct,
   onAddStock,
-  onEditProduct
+  onEditProduct,
+  onDeleteProduct
 }: InventoryViewProps) => {
   const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category))).sort(), [products]);
 
@@ -4032,6 +4125,15 @@ const InventoryView = ({
                       onClick={() => onEditProduct(product)}
                     >
                       Editar
+                    </Button>
+                    <Button
+                      variant="light"
+                      color="red"
+                      size="sm"
+                      leftSection={<Trash2 size={16} />}
+                      onClick={() => onDeleteProduct(product)}
+                    >
+                      Eliminar
                     </Button>
                   </Group>
                 </Stack>
