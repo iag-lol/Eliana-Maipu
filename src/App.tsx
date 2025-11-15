@@ -2069,7 +2069,8 @@ const App = () => {
     [productMap]
   );
 
-  // Detector MEJORADO de escaneo de códigos de barras con pistola lectora
+  // Detector ROBUSTO de escaneo de códigos de barras con pistola lectora
+  // Compatible con cualquier dispositivo y navegador
   useEffect(() => {
     if (activeTab !== "pos") return;
 
@@ -2077,11 +2078,15 @@ const App = () => {
     let lastKeyTime = 0;
     let resetTimeout: NodeJS.Timeout | null = null;
     let isScanning = false;
+    let keyTimes: number[] = [];
 
     const processBarcode = (code: string) => {
       const trimmedCode = code.trim();
 
-      console.log("🔍 Código escaneado:", trimmedCode);
+      console.log("═══════════════════════════════════════");
+      console.log("🔍 CÓDIGO ESCANEADO:", trimmedCode);
+      console.log("📏 Longitud:", trimmedCode.length, "caracteres");
+      console.log("═══════════════════════════════════════");
 
       if (trimmedCode.length === 0) return;
 
@@ -2089,7 +2094,8 @@ const App = () => {
       const product = products.find((p) => p.barcode === trimmedCode);
 
       if (product) {
-        console.log("✅ Producto encontrado:", product.name);
+        console.log("✅ PRODUCTO ENCONTRADO:", product.name);
+        console.log("💰 Precio:", product.price);
         handleAddProductToCart(product.id);
 
         notifications.show({
@@ -2099,7 +2105,8 @@ const App = () => {
           autoClose: 2000
         });
       } else {
-        console.log("❌ Producto NO encontrado para código:", trimmedCode);
+        console.log("❌ PRODUCTO NO ENCONTRADO");
+        console.log("📋 Códigos disponibles:", products.map(p => p.barcode).filter(Boolean).join(", "));
         notifications.show({
           title: "⚠️ Código no encontrado",
           message: `Código: ${trimmedCode}`,
@@ -2114,7 +2121,7 @@ const App = () => {
       const timeDiff = lastKeyTime > 0 ? currentTime - lastKeyTime : 1000;
 
       // Si es Enter, procesar el código escaneado
-      if (event.key === "Enter" || event.keyCode === 13) {
+      if (event.key === "Enter" || event.keyCode === 13 || event.code === "Enter") {
         if (resetTimeout) {
           clearTimeout(resetTimeout);
           resetTimeout = null;
@@ -2122,14 +2129,28 @@ const App = () => {
 
         const scannedCode = barcodeBuffer.trim();
 
-        // Solo procesar si el buffer tiene contenido Y fue un escaneo rápido
-        if (scannedCode.length > 0 && isScanning) {
+        // Calcular velocidad promedio de teclas
+        const avgSpeed = keyTimes.length > 1
+          ? keyTimes.reduce((acc, val, idx, arr) => {
+              if (idx === 0) return 0;
+              return acc + (val - arr[idx - 1]);
+            }, 0) / (keyTimes.length - 1)
+          : 0;
+
+        console.log("⏱️ Velocidad promedio de teclas:", avgSpeed.toFixed(2), "ms");
+        console.log("📊 Buffer actual:", scannedCode);
+        console.log("🎯 Es escaneo:", isScanning);
+
+        // Procesar si tiene contenido Y fue un escaneo rápido
+        // O si el buffer tiene más de 5 caracteres (probablemente es un código de barras)
+        if (scannedCode.length > 0 && (isScanning || scannedCode.length >= 5)) {
           // Prevenir submit de formularios y escritura en inputs
           event.preventDefault();
           event.stopPropagation();
 
           // Limpiar cualquier input que pueda tener el foco
-          if (document.activeElement instanceof HTMLInputElement) {
+          if (document.activeElement instanceof HTMLInputElement ||
+              document.activeElement instanceof HTMLTextAreaElement) {
             document.activeElement.blur();
           }
 
@@ -2139,11 +2160,13 @@ const App = () => {
         barcodeBuffer = "";
         isScanning = false;
         lastKeyTime = 0;
+        keyTimes = [];
         return;
       }
 
-      // Ignorar teclas especiales (excepto números y letras)
+      // Ignorar teclas especiales y modificadores
       if (event.key.length > 1 && !event.key.match(/^[0-9]$/)) return;
+      if (event.ctrlKey || event.altKey || event.metaKey) return;
 
       // Limpiar timeout anterior
       if (resetTimeout) {
@@ -2155,48 +2178,58 @@ const App = () => {
       if (timeDiff > 200) {
         barcodeBuffer = "";
         isScanning = false;
+        keyTimes = [];
       }
 
-      // Detectar si es un escaneo (teclas muy rápidas < 50ms)
-      // IMPORTANTE: detectar desde el PRIMER carácter
-      if (timeDiff < 50) {
+      // Detectar si es un escaneo (teclas muy rápidas < 100ms)
+      // Umbral más flexible para mejor compatibilidad con diferentes pistolas
+      if (timeDiff < 100) {
         isScanning = true;
       }
 
       // Agregar carácter al buffer
       const char = event.key;
       if (char && char.length === 1) {
-        // Si las teclas llegan muy rápido, prevenir escritura ANTES de agregar al buffer
-        if (timeDiff < 50 || isScanning) {
+        // Si las teclas llegan muy rápido o ya estamos escaneando, prevenir escritura
+        if (timeDiff < 100 || isScanning || barcodeBuffer.length > 0) {
           event.preventDefault();
           event.stopPropagation();
           isScanning = true;
         }
 
         barcodeBuffer += char;
+        keyTimes.push(currentTime);
 
-        // Auto-reset después de 300ms de inactividad
+        console.log("⌨️ Carácter:", char, "| Buffer:", barcodeBuffer, "| Tiempo:", timeDiff.toFixed(2), "ms");
+
+        // Auto-reset después de 500ms de inactividad (tiempo más generoso)
         resetTimeout = setTimeout(() => {
           if (barcodeBuffer.length > 0) {
-            console.log("🔄 Buffer reseteado por timeout:", barcodeBuffer);
+            console.log("⏰ TIMEOUT - Buffer reseteado:", barcodeBuffer);
           }
           barcodeBuffer = "";
           isScanning = false;
           lastKeyTime = 0;
-        }, 300);
+          keyTimes = [];
+        }, 500);
       }
 
       lastKeyTime = currentTime;
     };
 
     // Escuchar en document para capturar TODOS los eventos
+    // useCapture = true para interceptar antes que otros handlers
     document.addEventListener("keydown", handleKeyDown, true);
+
+    console.log("🚀 Detector de código de barras ACTIVADO");
+    console.log("📱 Compatible con cualquier dispositivo y navegador");
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
       if (resetTimeout) {
         clearTimeout(resetTimeout);
       }
+      console.log("🛑 Detector de código de barras DESACTIVADO");
     };
   }, [activeTab, products, handleAddProductToCart]);
 
