@@ -2038,6 +2038,7 @@ const App = () => {
     let barcodeBuffer = "";
     let lastKeyTime = Date.now();
     let resetTimeout: NodeJS.Timeout | null = null;
+    let isScanning = false;
 
     const processBarcode = (code: string) => {
       const trimmedCode = code.trim();
@@ -2083,6 +2084,12 @@ const App = () => {
       // Si pasa más de 200ms entre teclas, reiniciar buffer (escritura manual)
       if (timeDiff > 200) {
         barcodeBuffer = "";
+        isScanning = false;
+      }
+
+      // Detectar si es un escaneo (teclas muy rápidas < 100ms)
+      if (timeDiff < 100 && barcodeBuffer.length > 0) {
+        isScanning = true;
       }
 
       lastKeyTime = currentTime;
@@ -2093,14 +2100,20 @@ const App = () => {
 
         // Solo procesar si el buffer tiene contenido
         if (scannedCode.length > 0) {
-          // Prevenir submit de formularios
+          // Prevenir submit de formularios y escritura en inputs
           event.preventDefault();
           event.stopPropagation();
+
+          // Limpiar cualquier input que pueda tener el foco
+          if (document.activeElement instanceof HTMLInputElement) {
+            document.activeElement.blur();
+          }
 
           processBarcode(scannedCode);
         }
 
         barcodeBuffer = "";
+        isScanning = false;
         return;
       }
 
@@ -2112,12 +2125,20 @@ const App = () => {
       if (char && char.length === 1) {
         barcodeBuffer += char;
 
+        // Si estamos escaneando, prevenir que se escriba en inputs
+        if (isScanning || timeDiff < 100) {
+          event.preventDefault();
+          event.stopPropagation();
+          isScanning = true;
+        }
+
         // Auto-reset después de 300ms de inactividad
         resetTimeout = setTimeout(() => {
           if (barcodeBuffer.length > 0) {
             console.log("🔄 Buffer reseteado por timeout:", barcodeBuffer);
           }
           barcodeBuffer = "";
+          isScanning = false;
         }, 300);
       }
     };
