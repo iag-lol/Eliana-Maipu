@@ -2120,6 +2120,9 @@ const App = () => {
       const currentTime = Date.now();
       const timeDiff = lastKeyTime > 0 ? currentTime - lastKeyTime : 1000;
 
+      // Ignorar teclas modificadoras
+      if (event.ctrlKey || event.altKey || event.metaKey) return;
+
       // Si es Enter, procesar el código escaneado
       if (event.key === "Enter" || event.keyCode === 13 || event.code === "Enter") {
         if (resetTimeout) {
@@ -2137,14 +2140,13 @@ const App = () => {
             }, 0) / (keyTimes.length - 1)
           : 0;
 
-        console.log("⏱️ Velocidad promedio de teclas:", avgSpeed.toFixed(2), "ms");
-        console.log("📊 Buffer actual:", scannedCode);
+        console.log("⏱️ Velocidad promedio:", avgSpeed.toFixed(2), "ms");
+        console.log("📊 Buffer completo:", scannedCode, "| Longitud:", scannedCode.length);
         console.log("🎯 Es escaneo:", isScanning);
 
-        // Procesar si tiene contenido Y fue un escaneo rápido
-        // O si el buffer tiene más de 5 caracteres (probablemente es un código de barras)
-        if (scannedCode.length > 0 && (isScanning || scannedCode.length >= 5)) {
-          // Prevenir submit de formularios y escritura en inputs
+        // Procesar si el buffer tiene al menos 3 caracteres (código de barras mínimo)
+        if (scannedCode.length >= 3) {
+          // Prevenir submit de formularios
           event.preventDefault();
           event.stopPropagation();
 
@@ -2164,9 +2166,11 @@ const App = () => {
         return;
       }
 
-      // Ignorar teclas especiales y modificadores
-      if (event.key.length > 1 && !event.key.match(/^[0-9]$/)) return;
-      if (event.ctrlKey || event.altKey || event.metaKey) return;
+      // Solo procesar caracteres imprimibles (ignorar teclas especiales)
+      if (event.key.length > 1) return;
+
+      const char = event.key;
+      if (!char || char.length !== 1) return;
 
       // Limpiar timeout anterior
       if (resetTimeout) {
@@ -2174,47 +2178,45 @@ const App = () => {
         resetTimeout = null;
       }
 
-      // Si pasa más de 200ms entre teclas, reiniciar buffer (escritura manual)
-      if (timeDiff > 200) {
+      // Si pasa más de 300ms entre teclas, reiniciar buffer (escritura manual lenta)
+      if (timeDiff > 300 && barcodeBuffer.length > 0) {
+        console.log("⏱️ Reset por tiempo lento - Buffer anterior:", barcodeBuffer);
         barcodeBuffer = "";
         isScanning = false;
         keyTimes = [];
       }
 
-      // Detectar si es un escaneo (teclas muy rápidas < 100ms)
-      // Umbral más flexible para mejor compatibilidad con diferentes pistolas
-      if (timeDiff < 100) {
+      // Detectar si es un escaneo (teclas rápidas < 150ms)
+      if (timeDiff < 150 && barcodeBuffer.length > 0) {
         isScanning = true;
       }
 
-      // Agregar carácter al buffer
-      const char = event.key;
-      if (char && char.length === 1) {
-        // Si las teclas llegan muy rápido o ya estamos escaneando, prevenir escritura
-        if (timeDiff < 100 || isScanning || barcodeBuffer.length > 0) {
-          event.preventDefault();
-          event.stopPropagation();
+      // PREVENIR escritura si ya hay algo en buffer O si es escaneo rápido
+      if (barcodeBuffer.length > 0 || isScanning || timeDiff < 150) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isScanning && timeDiff < 150) {
           isScanning = true;
         }
-
-        barcodeBuffer += char;
-        keyTimes.push(currentTime);
-
-        console.log("⌨️ Carácter:", char, "| Buffer:", barcodeBuffer, "| Tiempo:", timeDiff.toFixed(2), "ms");
-
-        // Auto-reset después de 500ms de inactividad (tiempo más generoso)
-        resetTimeout = setTimeout(() => {
-          if (barcodeBuffer.length > 0) {
-            console.log("⏰ TIMEOUT - Buffer reseteado:", barcodeBuffer);
-          }
-          barcodeBuffer = "";
-          isScanning = false;
-          lastKeyTime = 0;
-          keyTimes = [];
-        }, 500);
       }
 
+      // SIEMPRE agregar el carácter al buffer
+      barcodeBuffer += char;
+      keyTimes.push(currentTime);
       lastKeyTime = currentTime;
+
+      console.log("⌨️", char, "| Buffer:", barcodeBuffer, "| Tiempo:", timeDiff.toFixed(0), "ms | Escaneo:", isScanning);
+
+      // Auto-reset después de 1 segundo de inactividad
+      resetTimeout = setTimeout(() => {
+        if (barcodeBuffer.length > 0) {
+          console.log("⏰ TIMEOUT - Reseteando buffer:", barcodeBuffer);
+        }
+        barcodeBuffer = "";
+        isScanning = false;
+        lastKeyTime = 0;
+        keyTimes = [];
+      }, 1000);
     };
 
     // Escuchar en document para capturar TODOS los eventos
