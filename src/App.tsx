@@ -2061,7 +2061,7 @@ const App = () => {
     if (activeTab !== "pos") return;
 
     let barcodeBuffer = "";
-    let lastKeyTime = Date.now();
+    let lastKeyTime = 0;
     let resetTimeout: NodeJS.Timeout | null = null;
     let isScanning = false;
 
@@ -2098,33 +2098,19 @@ const App = () => {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const currentTime = Date.now();
-      const timeDiff = currentTime - lastKeyTime;
-
-      // Limpiar timeout anterior
-      if (resetTimeout) {
-        clearTimeout(resetTimeout);
-        resetTimeout = null;
-      }
-
-      // Si pasa más de 200ms entre teclas, reiniciar buffer (escritura manual)
-      if (timeDiff > 200) {
-        barcodeBuffer = "";
-        isScanning = false;
-      }
-
-      // Detectar si es un escaneo (teclas muy rápidas < 100ms)
-      if (timeDiff < 100 && barcodeBuffer.length > 0) {
-        isScanning = true;
-      }
-
-      lastKeyTime = currentTime;
+      const timeDiff = lastKeyTime > 0 ? currentTime - lastKeyTime : 1000;
 
       // Si es Enter, procesar el código escaneado
       if (event.key === "Enter" || event.keyCode === 13) {
+        if (resetTimeout) {
+          clearTimeout(resetTimeout);
+          resetTimeout = null;
+        }
+
         const scannedCode = barcodeBuffer.trim();
 
-        // Solo procesar si el buffer tiene contenido
-        if (scannedCode.length > 0) {
+        // Solo procesar si el buffer tiene contenido Y fue un escaneo rápido
+        if (scannedCode.length > 0 && isScanning) {
           // Prevenir submit de formularios y escritura en inputs
           event.preventDefault();
           event.stopPropagation();
@@ -2139,23 +2125,42 @@ const App = () => {
 
         barcodeBuffer = "";
         isScanning = false;
+        lastKeyTime = 0;
         return;
       }
 
       // Ignorar teclas especiales (excepto números y letras)
       if (event.key.length > 1 && !event.key.match(/^[0-9]$/)) return;
 
+      // Limpiar timeout anterior
+      if (resetTimeout) {
+        clearTimeout(resetTimeout);
+        resetTimeout = null;
+      }
+
+      // Si pasa más de 200ms entre teclas, reiniciar buffer (escritura manual)
+      if (timeDiff > 200) {
+        barcodeBuffer = "";
+        isScanning = false;
+      }
+
+      // Detectar si es un escaneo (teclas muy rápidas < 50ms)
+      // IMPORTANTE: detectar desde el PRIMER carácter
+      if (timeDiff < 50) {
+        isScanning = true;
+      }
+
       // Agregar carácter al buffer
       const char = event.key;
       if (char && char.length === 1) {
-        barcodeBuffer += char;
-
-        // Si estamos escaneando, prevenir que se escriba en inputs
-        if (isScanning || timeDiff < 100) {
+        // Si las teclas llegan muy rápido, prevenir escritura ANTES de agregar al buffer
+        if (timeDiff < 50 || isScanning) {
           event.preventDefault();
           event.stopPropagation();
           isScanning = true;
         }
+
+        barcodeBuffer += char;
 
         // Auto-reset después de 300ms de inactividad
         resetTimeout = setTimeout(() => {
@@ -2164,8 +2169,11 @@ const App = () => {
           }
           barcodeBuffer = "";
           isScanning = false;
+          lastKeyTime = 0;
         }, 300);
       }
+
+      lastKeyTime = currentTime;
     };
 
     // Escuchar en document para capturar TODOS los eventos
