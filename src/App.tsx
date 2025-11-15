@@ -2172,6 +2172,11 @@ const App = () => {
       const char = event.key;
       if (!char || char.length !== 1) return;
 
+      // Verificar si el usuario está escribiendo en un input
+      const activeElement = document.activeElement;
+      const isTypingInInput = activeElement instanceof HTMLInputElement ||
+                              activeElement instanceof HTMLTextAreaElement;
+
       // Limpiar timeout anterior
       if (resetTimeout) {
         clearTimeout(resetTimeout);
@@ -2186,28 +2191,48 @@ const App = () => {
         keyTimes = [];
       }
 
-      // Detectar si es un escaneo (teclas rápidas < 150ms)
-      if (timeDiff < 150 && barcodeBuffer.length > 0) {
+      // Detectar si es un escaneo de pistola (teclas SÚPER rápidas < 40ms)
+      // Las pistolas envían caracteres en < 30ms típicamente
+      const isBarcodeScanner = timeDiff < 40;
+
+      if (isBarcodeScanner) {
         isScanning = true;
       }
 
-      // PREVENIR escritura si ya hay algo en buffer O si es escaneo rápido
-      if (barcodeBuffer.length > 0 || isScanning || timeDiff < 150) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!isScanning && timeDiff < 150) {
-          isScanning = true;
-        }
+      // LÓGICA DE PREVENCIÓN MEJORADA:
+      // 1. Si NO está en input Y hay buffer → prevenir (escaneo sin foco)
+      // 2. Si está en input pero teclas SÚPER rápidas → prevenir (pistola)
+      // 3. Si está en input y teclas normales → permitir (escritura manual)
+      let shouldPrevent = false;
+
+      if (!isTypingInInput && barcodeBuffer.length > 0) {
+        // No está escribiendo en input, es un escaneo sin foco
+        shouldPrevent = true;
+      } else if (isTypingInInput && isBarcodeScanner) {
+        // Está en input pero las teclas vienen a velocidad de pistola
+        shouldPrevent = true;
       }
 
-      // SIEMPRE agregar el carácter al buffer
-      barcodeBuffer += char;
-      keyTimes.push(currentTime);
+      if (shouldPrevent) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      // Agregar al buffer solo si es escaneo detectado
+      if (isBarcodeScanner || (!isTypingInInput && barcodeBuffer.length === 0)) {
+        barcodeBuffer += char;
+        keyTimes.push(currentTime);
+        console.log("⌨️", char, "| Buffer:", barcodeBuffer, "| Tiempo:", timeDiff.toFixed(0), "ms | Pistola:", isBarcodeScanner);
+      } else if (!isTypingInInput && barcodeBuffer.length > 0) {
+        // Continuación de escaneo sin input
+        barcodeBuffer += char;
+        keyTimes.push(currentTime);
+        console.log("⌨️", char, "| Buffer:", barcodeBuffer, "| Tiempo:", timeDiff.toFixed(0), "ms");
+      }
+
       lastKeyTime = currentTime;
 
-      console.log("⌨️", char, "| Buffer:", barcodeBuffer, "| Tiempo:", timeDiff.toFixed(0), "ms | Escaneo:", isScanning);
-
-      // Auto-reset después de 1 segundo de inactividad
+      // Auto-reset después de 500ms de inactividad
       resetTimeout = setTimeout(() => {
         if (barcodeBuffer.length > 0) {
           console.log("⏰ TIMEOUT - Reseteando buffer:", barcodeBuffer);
@@ -2216,7 +2241,7 @@ const App = () => {
         isScanning = false;
         lastKeyTime = 0;
         keyTimes = [];
-      }, 1000);
+      }, 500);
     };
 
     // Escuchar en document para capturar TODOS los eventos
