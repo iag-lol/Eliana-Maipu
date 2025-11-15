@@ -8,6 +8,7 @@ import {
   Box,
   Button,
   Card,
+  Chip,
   Divider,
   Drawer,
   Grid,
@@ -1840,6 +1841,7 @@ const App = () => {
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [search, setSearch] = useState("");
+  const [posCategoryFilter, setPosCategoryFilter] = useState<string | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>("cash");
   const [cashReceived, setCashReceived] = useState<number | undefined>(undefined);
   const [selectedFiadoClient, setSelectedFiadoClient] = useState<string | null>(null);
@@ -1964,13 +1966,24 @@ const App = () => {
     return salesMap;
   }, [sales]);
 
+  // Obtener categorías únicas ordenadas alfabéticamente
+  const uniqueCategories = useMemo(() => {
+    const categories = new Set(products.map((p) => p.category));
+    return Array.from(categories).sort();
+  }, [products]);
+
   const filteredProducts = useMemo(() => {
     let filtered = products;
+
+    // Filtrar por categoría si hay una seleccionada
+    if (posCategoryFilter) {
+      filtered = filtered.filter((product) => product.category === posCategoryFilter);
+    }
 
     // Filtrar por búsqueda si hay término
     if (search.trim()) {
       const term = search.toLowerCase();
-      filtered = products.filter(
+      filtered = filtered.filter(
         (product) =>
           product.name.toLowerCase().includes(term) ||
           product.category.toLowerCase().includes(term) ||
@@ -1984,7 +1997,7 @@ const App = () => {
       const salesB = productSalesCount.get(b.id) || 0;
       return salesB - salesA;
     });
-  }, [products, search, productSalesCount]);
+  }, [products, search, posCategoryFilter, productSalesCount]);
 
   const lowStockProducts = useMemo(() => products.filter((product) => product.stock <= product.minStock), [products]);
 
@@ -3306,6 +3319,32 @@ const App = () => {
                               />
                             }
                           />
+                          <div>
+                            <Group gap="xs" mb="xs">
+                              <Text size="sm" fw={500} c="dimmed">
+                                Filtrar por categoría:
+                              </Text>
+                              <Badge size="sm" variant="light" color="blue">
+                                {posCategoryFilter ? `${filteredProducts.length} productos` : `${products.length} productos`}
+                              </Badge>
+                            </Group>
+                            <Chip.Group
+                              multiple={false}
+                              value={posCategoryFilter || ""}
+                              onChange={(value) => setPosCategoryFilter(typeof value === 'string' ? (value || null) : null)}
+                            >
+                              <Group gap="xs">
+                                <Chip value="" variant="filled" color="gray" size="sm">
+                                  Todas
+                                </Chip>
+                                {uniqueCategories.map((category) => (
+                                  <Chip key={category} value={category} variant="filled" size="sm">
+                                    {category}
+                                  </Chip>
+                                ))}
+                              </Group>
+                            </Chip.Group>
+                          </div>
                           <ScrollArea h={isMobile ? 400 : 720}>
                             <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
                               {filteredProducts.map((product) => {
