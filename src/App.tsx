@@ -94,6 +94,7 @@ import {
   CartLine,
   Client,
   ClientMovement,
+  Expense,
   PaymentMethod,
   Product,
   ReportFilters,
@@ -101,7 +102,8 @@ import {
   SaleItem,
   Shift,
   ShiftSummary,
-  ShiftType
+  ShiftType,
+  StockChange
 } from "./types";
 import { FALLBACK_CLIENTS, FALLBACK_PRODUCTS, FALLBACK_SALES, FALLBACK_SHIFTS } from "./data/fallback";
 import { formatCurrency, formatDate, formatDateTime, formatTime } from "./utils/format";
@@ -346,6 +348,34 @@ async function fetchShifts(): Promise<Shift[]> {
   }
 
   return (data ?? []).map(mapShiftRow);
+}
+
+async function fetchExpenses(): Promise<Expense[]> {
+  const { data, error } = await supabase
+    .from("elianamaipu_expenses")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("Fallo al cargar gastos", error.message);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+async function fetchStockChanges(): Promise<StockChange[]> {
+  const { data, error } = await supabase
+    .from("elianamaipu_stock_changes")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("Fallo al cargar cambios de stock", error.message);
+    return [];
+  }
+
+  return data ?? [];
 }
 
 const computeShiftSummary = (sales: Sale[], shiftId: string | null | undefined): ShiftSummary => {
@@ -2179,10 +2209,22 @@ const App = () => {
     initialData: FALLBACK_SHIFTS
   });
 
+  const expensesQuery = useQuery({
+    queryKey: ["expenses"],
+    queryFn: fetchExpenses
+  });
+
+  const stockChangesQuery = useQuery({
+    queryKey: ["stock-changes"],
+    queryFn: fetchStockChanges
+  });
+
   const products = productQuery.data ?? [];
   const clients = clientsQuery.data ?? [];
   const sales = salesQuery.data ?? [];
   const shifts = shiftsQuery.data ?? [];
+  const expenses = expensesQuery.data ?? [];
+  const stockChanges = stockChangesQuery.data ?? [];
   const activeShift = useMemo(() => shifts.find((shift) => shift.status === "open"), [shifts]);
   const shiftSummary = useMemo(() => computeShiftSummary(sales, activeShift?.id ?? null), [sales, activeShift]);
 
@@ -4161,6 +4203,8 @@ const App = () => {
                 history={shiftHistory}
                 sales={sales}
                 products={products}
+                expenses={expenses}
+                stockChanges={stockChanges}
                 onDownloadPDF={handleDownloadShiftPDF}
               />
             )}
@@ -5596,10 +5640,22 @@ interface ShiftsViewProps {
   history: Shift[];
   sales: Sale[];
   products: Product[];
+  expenses: Expense[];
+  stockChanges: StockChange[];
   onDownloadPDF: (shift: Shift) => void;
 }
 
-const ShiftsView = ({ activeShift, summary, history, sales, products, onDownloadPDF }: ShiftsViewProps) => {
+const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, stockChanges, onDownloadPDF }: ShiftsViewProps) => {
+  // Filtrar gastos y cambios de stock del turno activo
+  const activeShiftExpenses = useMemo(() => {
+    if (!activeShift) return [];
+    return expenses.filter((exp) => exp.shift_id === activeShift.id);
+  }, [expenses, activeShift]);
+
+  const activeShiftStockChanges = useMemo(() => {
+    if (!activeShift) return [];
+    return stockChanges.filter((change) => change.shift_id === activeShift.id);
+  }, [stockChanges, activeShift]);
   const closedCount = history.length;
   const totalSales = history.reduce((acc, shift) => acc + (shift.total_sales ?? 0), 0);
   const totalDifferences = history.reduce((acc, shift) => acc + (shift.difference ?? 0), 0);
@@ -5840,6 +5896,101 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, onDownload
                     </Grid>
                   </Stack>
                 </Paper>
+
+                {/* Gastos del Turno */}
+                {activeShiftExpenses.length > 0 && (
+                  <Paper withBorder p="sm" radius="md" style={{ background: "rgba(251, 146, 60, 0.08)" }}>
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Text size="sm" fw={600} c="orange">
+                          GASTOS DEL TURNO
+                        </Text>
+                        <Badge color="orange" variant="light">
+                          ${activeShiftExpenses.reduce((sum, exp) => sum + exp.amount, 0).toLocaleString("es-CL")}
+                        </Badge>
+                      </Group>
+                      <Text size="xs" c="dimmed" style={{ fontStyle: "italic" }}>
+                        Se descontarán del efectivo esperado al cerrar el turno
+                      </Text>
+                      <Divider />
+                      {activeShiftExpenses.map((expense) => (
+                        <Group key={expense.id} justify="space-between">
+                          <Group gap="xs">
+                            <Badge size="sm" variant="dot" color="orange">
+                              {expense.type}
+                            </Badge>
+                            {expense.description && (
+                              <Text size="sm" c="dimmed">
+                                {expense.description}
+                              </Text>
+                            )}
+                          </Group>
+                          <Text fw={600} size="sm">
+                            {formatCurrency(expense.amount)}
+                          </Text>
+                        </Group>
+                      ))}
+                    </Stack>
+                  </Paper>
+                )}
+
+                {/* Modificaciones de Stock */}
+                {activeShiftStockChanges.length > 0 && (
+                  <Paper withBorder p="sm" radius="md" style={{ background: "rgba(16, 185, 129, 0.08)" }}>
+                    <Stack gap="xs">
+                      <Group justify="space-between">
+                        <Text size="sm" fw={600} c="teal">
+                          MODIFICACIONES DE STOCK
+                        </Text>
+                        <Badge color="teal" variant="light">
+                          {activeShiftStockChanges.length} cambios
+                        </Badge>
+                      </Group>
+                      <Text size="xs" c="dimmed" style={{ fontStyle: "italic" }}>
+                        Registro de cambios de inventario durante el turno
+                      </Text>
+                      <Divider />
+                      <ScrollArea h={activeShiftStockChanges.length > 3 ? 200 : "auto"}>
+                        <Table highlightOnHover>
+                          <Table.Thead>
+                            <Table.Tr>
+                              <Table.Th>Producto</Table.Th>
+                              <Table.Th>Cantidad</Table.Th>
+                              <Table.Th>Stock</Table.Th>
+                              <Table.Th>Usuario</Table.Th>
+                            </Table.Tr>
+                          </Table.Thead>
+                          <Table.Tbody>
+                            {activeShiftStockChanges.map((change) => (
+                              <Table.Tr key={change.id}>
+                                <Table.Td>
+                                  <Text size="sm" fw={500}>
+                                    {change.product_name}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Badge color="teal" variant="light">
+                                    +{change.quantity_added}
+                                  </Badge>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text size="sm" c="dimmed">
+                                    {change.stock_before} → {change.stock_after}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>
+                                  <Text size="sm" c="dimmed">
+                                    {change.modified_by}
+                                  </Text>
+                                </Table.Td>
+                              </Table.Tr>
+                            ))}
+                          </Table.Tbody>
+                        </Table>
+                      </ScrollArea>
+                    </Stack>
+                  </Paper>
+                )}
               </Stack>
             </Paper>
           ) : (
