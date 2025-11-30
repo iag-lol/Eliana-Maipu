@@ -2868,7 +2868,7 @@ const App = () => {
       quantity_added: quantity,
       stock_before: stockBefore,
       stock_after: stockAfter,
-      user: activeShift.seller
+      modified_by: activeShift.seller
     });
 
     if (changeError) {

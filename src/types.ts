@@ -81,7 +81,7 @@ export interface StockChange {
   quantity_added: number;
   stock_before: number;
   stock_after: number;
-  user: string;
+  modified_by: string;
   created_at: string;
 }
 

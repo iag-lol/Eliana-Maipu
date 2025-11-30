@@ -215,7 +215,7 @@ export const generateShiftPDF = (data: ShiftPDFData) => {
     stockChanges.forEach((change) => {
       const changeText = `• ${change.product_name}`;
       const detailText = `  ${change.stock_before} → ${change.stock_after} unidades (+${change.quantity_added})`;
-      const userText = `  Modificado por: ${change.user}`;
+      const userText = `  Modificado por: ${change.modified_by}`;
 
       doc.text(changeText, margin + 5, yPosition);
       yPosition += 5;

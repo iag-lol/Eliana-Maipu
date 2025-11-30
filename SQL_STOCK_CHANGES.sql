@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS elianamaipu_stock_changes (
   quantity_added INTEGER NOT NULL,
   stock_before INTEGER NOT NULL,
   stock_after INTEGER NOT NULL,
-  user TEXT NOT NULL,
+  modified_by TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS elianamaipu_stock_changes (
 CREATE INDEX idx_stock_changes_shift_id ON elianamaipu_stock_changes(shift_id);
 CREATE INDEX idx_stock_changes_product_id ON elianamaipu_stock_changes(product_id);
 CREATE INDEX idx_stock_changes_created_at ON elianamaipu_stock_changes(created_at);
-CREATE INDEX idx_stock_changes_user ON elianamaipu_stock_changes(user);
+CREATE INDEX idx_stock_changes_modified_by ON elianamaipu_stock_changes(modified_by);
 
 -- 3. Verificar que todo esté correcto
 SELECT
@@ -48,7 +48,7 @@ SELECT
   sc.quantity_added,
   sc.stock_before,
   sc.stock_after,
-  sc.user,
+  sc.modified_by,
   s.seller AS shift_seller,
   s.type AS shift_type
 FROM elianamaipu_stock_changes sc
