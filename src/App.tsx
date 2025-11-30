@@ -15,6 +15,7 @@ import {
   Group,
   Modal,
   NumberInput,
+  PasswordInput,
   Paper,
   ScrollArea,
   Select,
@@ -117,6 +118,7 @@ type Role = "admin" | "manager";
 
 const ADMIN_PASSWORD = "eliana152100"; // Acceso completo
 const MANAGER_PASSWORD = "selena1521"; // Solo dashboard, POS, inventario
+const SENSITIVE_ACTION_PASSWORD = "Beta2025"; // Requerida para gastos y stock rápido
 
 type TabId = "dashboard" | "pos" | "inventory" | "fiados" | "reports" | "shifts";
 
@@ -631,7 +633,7 @@ const CustomerDisplay = ({
 interface ExpenseModalProps {
   opened: boolean;
   onClose: () => void;
-  onRegisterExpense: (payload: { type: string; amount: number; description: string }) => void;
+  onRegisterExpense: (payload: { type: string; amount: number; description: string; password: string }) => void;
   activeShift?: Shift;
 }
 
@@ -646,12 +648,14 @@ const ExpenseModal = ({ opened, onClose, onRegisterExpense, activeShift }: Expen
   const [expenseType, setExpenseType] = useState<string>("sueldo");
   const [amount, setAmount] = useState<number | undefined>(undefined);
   const [description, setDescription] = useState("");
+  const [securityPassword, setSecurityPassword] = useState("");
 
   useEffect(() => {
     if (!opened) {
       setExpenseType("sueldo");
       setAmount(undefined);
       setDescription("");
+      setSecurityPassword("");
     }
   }, [opened]);
 
@@ -665,10 +669,20 @@ const ExpenseModal = ({ opened, onClose, onRegisterExpense, activeShift }: Expen
       return;
     }
 
+    if (securityPassword !== SENSITIVE_ACTION_PASSWORD) {
+      notifications.show({
+        title: "Contraseña requerida",
+        message: "Ingresa la contraseña correcta para registrar gastos.",
+        color: "red"
+      });
+      return;
+    }
+
     onRegisterExpense({
       type: expenseType,
       amount,
-      description
+      description,
+      password: securityPassword
     });
     onClose();
   };
@@ -709,6 +723,14 @@ const ExpenseModal = ({ opened, onClose, onRegisterExpense, activeShift }: Expen
           maxLength={200}
         />
 
+        <PasswordInput
+          label="Contraseña de autorización"
+          placeholder="Ingresa la contraseña"
+          value={securityPassword}
+          onChange={(event) => setSecurityPassword(event.currentTarget.value)}
+          required
+        />
+
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
             Cancelar
@@ -725,7 +747,7 @@ const ExpenseModal = ({ opened, onClose, onRegisterExpense, activeShift }: Expen
 interface QuickStockModalProps {
   opened: boolean;
   onClose: () => void;
-  onAddStock: (payload: { productId: string; quantity: number; productName: string; stockBefore: number }) => void;
+  onAddStock: (payload: { productId: string; quantity: number; productName: string; stockBefore: number; password: string }) => void;
   products: Product[];
   activeShift?: Shift;
 }
@@ -734,12 +756,14 @@ const QuickStockModal = ({ opened, onClose, onAddStock, products, activeShift }:
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState<number | undefined>(undefined);
+  const [securityPassword, setSecurityPassword] = useState("");
 
   useEffect(() => {
     if (!opened) {
       setSearchTerm("");
       setSelectedProduct(null);
       setQuantity(undefined);
+      setSecurityPassword("");
     }
   }, [opened]);
 
@@ -782,11 +806,21 @@ const QuickStockModal = ({ opened, onClose, onAddStock, products, activeShift }:
       return;
     }
 
+    if (securityPassword !== SENSITIVE_ACTION_PASSWORD) {
+      notifications.show({
+        title: "Contraseña requerida",
+        message: "Ingresa la contraseña correcta para modificar el stock.",
+        color: "red"
+      });
+      return;
+    }
+
     onAddStock({
       productId: selectedProduct.id,
       quantity,
       productName: selectedProduct.name,
-      stockBefore: selectedProduct.stock
+      stockBefore: selectedProduct.stock,
+      password: securityPassword
     });
     onClose();
   };
@@ -889,6 +923,14 @@ const QuickStockModal = ({ opened, onClose, onAddStock, products, activeShift }:
             </Stack>
           </Paper>
         )}
+
+        <PasswordInput
+          label="Contraseña de autorización"
+          placeholder="Ingresa la contraseña"
+          value={securityPassword}
+          onChange={(event) => setSecurityPassword(event.currentTarget.value)}
+          required
+        />
 
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>
@@ -2829,7 +2871,26 @@ const App = () => {
     shiftModalHandlers.close();
   };
 
-  const handleRegisterExpense = async ({ type, amount, description }: { type: string; amount: number; description: string }) => {
+  const handleRegisterExpense = async ({
+    type,
+    amount,
+    description,
+    password
+  }: {
+    type: string;
+    amount: number;
+    description: string;
+    password: string;
+  }) => {
+    if (password !== SENSITIVE_ACTION_PASSWORD) {
+      notifications.show({
+        title: "Contraseña requerida",
+        message: "Debes ingresar la contraseña correcta para registrar un gasto.",
+        color: "red"
+      });
+      return;
+    }
+
     if (!activeShift) {
       notifications.show({
         title: "Error",
@@ -2864,7 +2925,26 @@ const App = () => {
     await queryClient.invalidateQueries({ queryKey: ["shifts"] });
   };
 
-  const handleQuickAddStock = async ({ productId, quantity }: { productId: string; quantity: number }) => {
+  const handleQuickAddStock = async ({
+    productId,
+    quantity,
+    password
+  }: {
+    productId: string;
+    quantity: number;
+    password: string;
+    productName?: string;
+    stockBefore?: number;
+  }) => {
+    if (password !== SENSITIVE_ACTION_PASSWORD) {
+      notifications.show({
+        title: "Contraseña requerida",
+        message: "Debes ingresar la contraseña correcta para modificar el stock.",
+        color: "red"
+      });
+      return;
+    }
+
     if (!activeShift) {
       notifications.show({
         title: "Error",
