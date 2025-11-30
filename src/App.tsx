@@ -31,11 +31,14 @@ import {
   Progress,
   useMantineColorScheme
 } from "@mantine/core";
+import { DatePickerInput } from "@mantine/dates";
 import { Notifications, notifications } from "@mantine/notifications";
 import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -49,6 +52,8 @@ import {
 } from "recharts";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+import isoWeek from "dayjs/plugin/isoWeek";
 import "dayjs/locale/es";
 import {
   AlertTriangle,
@@ -111,6 +116,8 @@ import { formatCurrency, formatDate, formatDateTime, formatTime } from "./utils/
 import { generateShiftPDF } from "./utils/generateShiftPDF";
 
 dayjs.extend(relativeTime);
+dayjs.extend(customParseFormat);
+dayjs.extend(isoWeek);
 dayjs.locale("es");
 
 // Sistema de roles y contraseñas
@@ -2212,7 +2219,7 @@ const App = () => {
   const [deleteProductModalOpened, deleteProductModalHandlers] = useDisclosure(false);
   const [selectedProductForDelete, setSelectedProductForDelete] = useState<Product | null>(null);
 
-  const [reportFilters, setReportFilters] = useState<ReportFilters>({ range: "today" });
+  const [reportFilters, setReportFilters] = useState<ReportFilters>({ range: "today", from: null, to: null });
   const [now, setNow] = useState(dayjs());
 
   useEffect(() => {
@@ -3387,7 +3394,7 @@ const App = () => {
     clientModalHandlers.close();
   };
 
-  const filteredSalesForReports = useMemo(() => {
+  const reportingRange = useMemo(() => {
     const now = dayjs();
     let start: dayjs.Dayjs | null = null;
     let end: dayjs.Dayjs | null = null;
@@ -3398,20 +3405,30 @@ const App = () => {
         end = now.endOf("day");
         break;
       case "week":
-        start = now.startOf("week");
-        end = now.endOf("week");
+        start = now.startOf("isoWeek");
+        end = now.endOf("isoWeek");
         break;
       case "month":
         start = now.startOf("month");
         end = now.endOf("month");
         break;
       case "custom":
-        start = reportFilters.from ? dayjs(reportFilters.from) : null;
-        end = reportFilters.to ? dayjs(reportFilters.to) : null;
+        start = reportFilters.from ? dayjs(reportFilters.from).startOf("day") : null;
+        end = reportFilters.to ? dayjs(reportFilters.to).endOf("day") : null;
         break;
       default:
         break;
     }
+
+    if (start && end && end.isBefore(start)) {
+      [start, end] = [end, start];
+    }
+
+    return { start, end };
+  }, [reportFilters]);
+
+  const filteredSalesForReports = useMemo(() => {
+    const { start, end } = reportingRange;
 
     return sales.filter((sale) => {
       if (sale.type === "return") return false;
@@ -3420,9 +3437,10 @@ const App = () => {
       if (end && date.isAfter(end)) return false;
       return true;
     });
-  }, [sales, reportFilters]);
+  }, [sales, reportingRange]);
 
   const reportSummary = useMemo(() => {
+    const { start, end } = reportingRange;
     const total = filteredSalesForReports.reduce((acc, sale) => acc + sale.total, 0);
     const tickets = filteredSalesForReports.length;
     const byPayment = filteredSalesForReports.reduce<Record<PaymentMethod, number>>(
@@ -3432,36 +3450,90 @@ const App = () => {
       },
       { cash: 0, card: 0, transfer: 0, fiado: 0, staff: 0 }
     );
-    const productMap = new Map<string, { id: string; name: string; total: number; quantity: number }>();
+
+    const productMap = new Map<
+      string,
+      { id: string; name: string; total: number; quantity: number }
+    >();
+    const dailyMap = new Map<string, { dateKey: string; dateLabel: string; total: number; tickets: number }>();
+
     filteredSalesForReports.forEach((sale) => {
+      const saleDay = dayjs(sale.created_at);
+      const dateKey = saleDay.format("YYYY-MM-DD");
+      const dateLabel = saleDay.format("DD-MM-YYYY");
+
+      const daily = dailyMap.get(dateKey) ?? { dateKey, dateLabel, total: 0, tickets: 0 };
+      daily.total += sale.total;
+      daily.tickets += 1;
+      dailyMap.set(dateKey, daily);
+
       sale.items.forEach((item) => {
-        const target = productMap.get(item.productId) ?? { id: item.productId, name: item.name, total: 0, quantity: 0 };
+        const target =
+          productMap.get(item.productId) ?? { id: item.productId, name: item.name, total: 0, quantity: 0 };
         target.total += item.price * item.quantity;
         target.quantity += item.quantity;
         productMap.set(item.productId, target);
       });
     });
-    const topProducts = Array.from(productMap.values()).sort((a, b) => b.quantity - a.quantity).slice(0, 20);
-    const bySeller = filteredSalesForReports.reduce<Record<string, { seller: string; total: number; tickets: number }>>(
-      (acc, sale) => {
-        const key = sale.seller ?? "Mostrador";
-        const entry = acc[key] ?? { seller: key, total: 0, tickets: 0 };
-        entry.total += sale.total;
-        entry.tickets += 1;
-        acc[key] = entry;
-        return acc;
-      },
-      {}
+
+    const topProducts = Array.from(productMap.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 20)
+      .map((item) => ({
+        ...item,
+        share: total > 0 ? (item.total / total) * 100 : 0
+      }));
+
+    const bySeller = filteredSalesForReports.reduce<
+      Record<string, { seller: string; total: number; tickets: number; avgTicket: number }>
+    >((acc, sale) => {
+      const key = sale.seller ?? "Mostrador";
+      const entry = acc[key] ?? { seller: key, total: 0, tickets: 0, avgTicket: 0 };
+      entry.total += sale.total;
+      entry.tickets += 1;
+      acc[key] = entry;
+      return acc;
+    }, {});
+
+    const daysCovered =
+      start && end
+        ? Math.max(1, end.diff(start, "day") + 1)
+        : Math.max(1, dailyMap.size || 1);
+
+    const avgTicket = tickets === 0 ? 0 : total / tickets;
+    const avgDaily = total === 0 ? 0 : total / daysCovered;
+    const paymentShare = PAYMENT_ORDER.map((method) => ({
+      id: method,
+      total: byPayment[method],
+      percent: total > 0 ? (byPayment[method] / total) * 100 : 0
+    }));
+
+    const dailySeries = Array.from(dailyMap.values()).sort(
+      (a, b) => dayjs(a.dateKey).valueOf() - dayjs(b.dateKey).valueOf()
     );
+
+    Object.values(bySeller).forEach((item) => {
+      item.avgTicket = item.tickets > 0 ? item.total / item.tickets : 0;
+    });
+
+    const rangeLabel =
+      start || end
+        ? `${start ? start.format("DD-MM-YYYY") : "sin inicio"} al ${end ? end.format("DD-MM-YYYY") : "hoy"}`
+        : "Histórico completo";
 
     return {
       total,
       tickets,
+      avgTicket,
+      avgDaily,
       byPayment,
+      paymentShare,
       topProducts,
-      bySeller: Object.values(bySeller)
+      bySeller: Object.values(bySeller).sort((a, b) => b.total - a.total),
+      dailySeries,
+      rangeLabel
     };
-  }, [filteredSalesForReports]);
+  }, [filteredSalesForReports, reportingRange]);
 
   const shiftHistory = useMemo(
     () =>
@@ -5547,117 +5619,225 @@ interface ReportsViewProps {
   summary: {
     total: number;
     tickets: number;
+    avgTicket: number;
+    avgDaily: number;
     byPayment: Record<PaymentMethod, number>;
-    topProducts: { id: string; name: string; total: number; quantity: number }[];
-    bySeller: { seller: string; total: number; tickets: number }[];
+    paymentShare: { id: PaymentMethod; total: number; percent: number }[];
+    topProducts: { id: string; name: string; total: number; quantity: number; share: number }[];
+    bySeller: { seller: string; total: number; tickets: number; avgTicket: number }[];
+    dailySeries: { dateKey: string; dateLabel: string; total: number; tickets: number }[];
+    rangeLabel: string;
   };
 }
 
 const ReportsView = ({ filters, onChangeFilters, summary }: ReportsViewProps) => {
-  const paymentData = Object.entries(summary.byPayment).map(([key, value]) => ({
-    name: key.toUpperCase(),
-    value
-  }));
+  const paymentChartData = summary.paymentShare
+    .filter((item) => item.total > 0)
+    .map((item) => ({
+      name: PAYMENT_LABELS[item.id],
+      value: item.total,
+      percent: item.percent,
+      method: item.id
+    }));
 
-  const paymentChartData = paymentData.filter((item) => item.value > 0);
+  const sellerChartData = summary.bySeller.map((seller) => ({
+    ...seller,
+    label: seller.seller || "Mostrador"
+  }));
 
   return (
     <Stack gap="xl">
       <Card withBorder radius="lg">
         <Stack gap="md">
-          <Group justify="space-between">
-            <Title order={3}>Reportes de ventas</Title>
-            <Group>
+          <Group justify="space-between" align="flex-start">
+            <div>
+              <Title order={3}>Reportes de ventas</Title>
+              <Text size="sm" c="dimmed">
+                Rango: {summary.rangeLabel} • Formato DD-MM-YYYY
+              </Text>
+            </div>
+            <Group align="flex-end" gap="md">
               <Select
                 label="Rango rápido"
                 data={REPORT_RANGES}
                 value={filters.range}
-                onChange={(value) => onChangeFilters({ ...filters, range: (value as ReportFilters["range"]) ?? "today" })}
+                onChange={(value) =>
+                  onChangeFilters({ range: (value as ReportFilters["range"]) ?? "today", from: null, to: null })
+                }
               />
               {filters.range === "custom" && (
-                <Group align="flex-end">
-                  <TextInput
-                    label="Desde"
-                    placeholder="YYYY-MM-DD"
-                    value={filters.from ?? ""}
-                    onChange={(event) => onChangeFilters({ ...filters, from: event.currentTarget.value })}
-                  />
-                  <TextInput
-                    label="Hasta"
-                    placeholder="YYYY-MM-DD"
-                    value={filters.to ?? ""}
-                    onChange={(event) => onChangeFilters({ ...filters, to: event.currentTarget.value })}
-                  />
-                </Group>
+                <DatePickerInput
+                  type="range"
+                  label="Rango personalizado"
+                  value={[filters.from ?? null, filters.to ?? null]}
+                  onChange={([from, to]) => onChangeFilters({ ...filters, from, to })}
+                  valueFormat="DD-MM-YYYY"
+                  placeholder="Selecciona fechas"
+                  locale="es"
+                  clearable
+                />
               )}
             </Group>
           </Group>
-          <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
+          <SimpleGrid cols={{ base: 1, md: 2, lg: 4 }} spacing="md">
             <Paper withBorder p="md" radius="md">
-              <Stack gap={4}>
-                <Text c="dimmed">Total vendido</Text>
-                <Text fw={700} size="xl">
-                  {formatCurrency(summary.total)}
+              <Stack gap={6}>
+                <Text c="dimmed" size="sm">
+                  Total vendido
                 </Text>
+                <Title order={2}>{formatCurrency(summary.total)}</Title>
                 <Badge color="teal" variant="light">
-                  {summary.tickets} tickets
+                  {summary.tickets} tickets en rango
                 </Badge>
               </Stack>
             </Paper>
             <Paper withBorder p="md" radius="md">
-              <Stack gap={4}>
-                <Text c="dimmed">Ticket promedio</Text>
-                <Text fw={700} size="xl">
-                  {summary.tickets === 0 ? formatCurrency(0) : formatCurrency(summary.total / summary.tickets)}
+              <Stack gap={6}>
+                <Text c="dimmed" size="sm">
+                  Ticket promedio
                 </Text>
+                <Title order={2}>{formatCurrency(summary.avgTicket)}</Title>
                 <Badge color="indigo" variant="light">
-                  Indicador general
+                  Mide consistencia
                 </Badge>
               </Stack>
             </Paper>
             <Paper withBorder p="md" radius="md">
-              <Stack gap={4}>
-                <Text c="dimmed">Efectivo controlado</Text>
-                <Text fw={700} size="xl">
-                  {formatCurrency(summary.byPayment.cash)}
+              <Stack gap={6}>
+                <Text c="dimmed" size="sm">
+                  Promedio diario
                 </Text>
+                <Title order={2}>{formatCurrency(summary.avgDaily)}</Title>
+                <Badge color="violet" variant="light">
+                  Ventas/día
+                </Badge>
+              </Stack>
+            </Paper>
+            <Paper withBorder p="md" radius="md">
+              <Stack gap={6}>
+                <Text c="dimmed" size="sm">
+                  Efectivo controlado
+                </Text>
+                <Title order={2}>{formatCurrency(summary.byPayment.cash)}</Title>
                 <Badge color="orange" variant="light">
                   Caja física
                 </Badge>
               </Stack>
             </Paper>
           </SimpleGrid>
+
           <Grid gutter="xl">
             <Grid.Col span={{ base: 12, md: 6 }}>
-              <Card withBorder radius="md" h={360}>
+              <Card withBorder radius="md" h={420}>
                 <Stack gap="md" h="100%">
-                  <Text fw={600}>Ventas por método de pago</Text>
-                  {paymentChartData.length === 0 ? (
+                  <Group justify="space-between">
+                    <Text fw={600}>Ventas por método de pago</Text>
+                    <Badge color="gray" variant="light">
+                      Participación y monto
+                    </Badge>
+                  </Group>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" style={{ flex: 1 }}>
+                    <div style={{ minHeight: 240 }}>
+                      {paymentChartData.length === 0 ? (
+                        <Paper withBorder p="lg" radius="md">
+                          <Text c="dimmed" ta="center">
+                            No hay datos suficientes.
+                          </Text>
+                        </Paper>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={paymentChartData}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={90}
+                              innerRadius={50}
+                              paddingAngle={2}
+                            >
+                              {paymentChartData.map((entry) => (
+                                <Cell key={entry.method} fill={PAYMENT_COLORS[entry.method]} />
+                              ))}
+                            </Pie>
+                            <ChartTooltip formatter={(value: number) => formatCurrency(value)} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
+                    <ScrollArea>
+                      <Table highlightOnHover>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>Método</Table.Th>
+                            <Table.Th>Monto</Table.Th>
+                            <Table.Th>%</Table.Th>
+                          </Table.Tr>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {summary.paymentShare.map((item) => (
+                            <Table.Tr key={item.id}>
+                              <Table.Td>{PAYMENT_LABELS[item.id]}</Table.Td>
+                              <Table.Td>{formatCurrency(item.total)}</Table.Td>
+                              <Table.Td>{item.percent.toFixed(1)}%</Table.Td>
+                            </Table.Tr>
+                          ))}
+                        </Table.Tbody>
+                      </Table>
+                    </ScrollArea>
+                  </SimpleGrid>
+                </Stack>
+              </Card>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Card withBorder radius="md" h={420}>
+                <Stack gap="md" h="100%">
+                  <Group justify="space-between">
+                    <Text fw={600}>Tendencia diaria</Text>
+                    <Badge color="indigo" variant="light">
+                      Ventas y tickets
+                    </Badge>
+                  </Group>
+                  {summary.dailySeries.length === 0 ? (
                     <Paper withBorder p="lg" radius="md">
                       <Text c="dimmed" ta="center">
-                        No hay datos suficientes.
+                        No hay ventas en el rango seleccionado.
                       </Text>
                     </Paper>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={paymentChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={110}>
-                          {paymentChartData.map((entry) => (
-                            <Cell key={entry.name} fill={PAYMENT_COLORS[entry.name.toLowerCase() as PaymentMethod]} />
-                          ))}
-                        </Pie>
+                      <AreaChart data={summary.dailySeries} margin={{ left: 0, right: 0 }}>
+                        <defs>
+                          <linearGradient id="salesArea" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#4263eb" stopOpacity={0.35} />
+                            <stop offset="95%" stopColor="#4263eb" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="dateLabel" tick={{ fontSize: 12 }} />
+                        <YAxis tickFormatter={(value) => `${Math.round(value / 1000)}K`} />
                         <ChartTooltip formatter={(value: number) => formatCurrency(value)} />
-                      </PieChart>
+                        <Area type="monotone" dataKey="total" stroke="#4263eb" fill="url(#salesArea)" strokeWidth={2} />
+                      </AreaChart>
                     </ResponsiveContainer>
                   )}
                 </Stack>
               </Card>
             </Grid.Col>
+          </Grid>
+
+          <Grid gutter="xl">
             <Grid.Col span={{ base: 12, md: 6 }}>
-              <Card withBorder radius="md" h={360}>
+              <Card withBorder radius="md" h={420}>
                 <Stack gap="md" h="100%">
-                  <Text fw={600}>Rendimiento por vendedor</Text>
-                  {summary.bySeller.length === 0 ? (
+                  <Group justify="space-between">
+                    <Text fw={600}>Rendimiento por vendedor</Text>
+                    <Badge color="blue" variant="light">
+                      Tickets y total
+                    </Badge>
+                  </Group>
+                  {sellerChartData.length === 0 ? (
                     <Paper withBorder p="lg" radius="md">
                       <Text c="dimmed" ta="center">
                         Aún no hay datos registrados.
@@ -5665,11 +5845,15 @@ const ReportsView = ({ filters, onChangeFilters, summary }: ReportsViewProps) =>
                     </Paper>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={summary.bySeller}>
+                      <BarChart data={sellerChartData}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="seller" />
-                        <YAxis tickFormatter={(value) => `${value / 1000}K`} />
-                        <ChartTooltip formatter={(value: number) => formatCurrency(value)} />
+                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                        <YAxis tickFormatter={(value) => `${Math.round(value / 1000)}K`} />
+                        <ChartTooltip
+                          formatter={(value: number, _name, payload) =>
+                            `${formatCurrency(value)} • ${payload?.payload?.tickets ?? 0} tickets`
+                          }
+                        />
                         <Bar dataKey="total" fill="#4263eb" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -5677,7 +5861,42 @@ const ReportsView = ({ filters, onChangeFilters, summary }: ReportsViewProps) =>
                 </Stack>
               </Card>
             </Grid.Col>
+            <Grid.Col span={{ base: 12, md: 6 }}>
+              <Card withBorder radius="md" h={420}>
+                <Stack gap="md" h="100%">
+                  <Group justify="space-between">
+                    <Text fw={600}>Detalle de vendedores</Text>
+                    <Badge color="gray" variant="light">
+                      Ordenado por monto
+                    </Badge>
+                  </Group>
+                  <ScrollArea>
+                    <Table highlightOnHover>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Vendedor</Table.Th>
+                          <Table.Th>Tickets</Table.Th>
+                          <Table.Th>Ticket prom.</Table.Th>
+                          <Table.Th>Total</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {summary.bySeller.map((seller) => (
+                          <Table.Tr key={seller.seller}>
+                            <Table.Td>{seller.seller}</Table.Td>
+                            <Table.Td>{seller.tickets}</Table.Td>
+                            <Table.Td>{formatCurrency(seller.avgTicket)}</Table.Td>
+                            <Table.Td>{formatCurrency(seller.total)}</Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </ScrollArea>
+                </Stack>
+              </Card>
+            </Grid.Col>
           </Grid>
+
           <Card withBorder radius="md">
             <Stack gap="md">
               <Group justify="space-between">
@@ -5686,13 +5905,14 @@ const ReportsView = ({ filters, onChangeFilters, summary }: ReportsViewProps) =>
                   Actualizado
                 </Badge>
               </Group>
-              <ScrollArea h={280}>
+              <ScrollArea h={320}>
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
                       <Table.Th>Producto</Table.Th>
                       <Table.Th>Cantidad</Table.Th>
                       <Table.Th>Total</Table.Th>
+                      <Table.Th>% del rango</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -5701,6 +5921,7 @@ const ReportsView = ({ filters, onChangeFilters, summary }: ReportsViewProps) =>
                         <Table.Td>{product.name}</Table.Td>
                         <Table.Td>{product.quantity}</Table.Td>
                         <Table.Td>{formatCurrency(product.total)}</Table.Td>
+                        <Table.Td>{product.share.toFixed(1)}%</Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>

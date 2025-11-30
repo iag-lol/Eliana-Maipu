@@ -110,6 +110,6 @@ export interface ShiftSummary {
 
 export interface ReportFilters {
   range: "today" | "week" | "month" | "custom";
-  from?: string | null;
-  to?: string | null;
+  from?: Date | null;
+  to?: Date | null;
 }
