@@ -62,6 +62,17 @@ export interface Sale {
 
 export type ShiftType = "dia" | "noche";
 
+export type ExpenseType = "sueldo" | "flete" | "proveedor" | "otro";
+
+export interface Expense {
+  id: string;
+  shift_id: string;
+  type: ExpenseType;
+  amount: number;
+  description?: string | null;
+  created_at: string;
+}
+
 export interface Shift {
   id: string;
   seller: string;
@@ -76,6 +87,7 @@ export interface Shift {
   total_sales?: number | null;
   tickets?: number | null;
   payments_breakdown?: Record<PaymentMethod, number> | null;
+  total_expenses?: number | null;
 }
 
 export interface ShiftSummary {

@@ -597,6 +597,100 @@ const CustomerDisplay = ({
   </Box>
 );
 
+interface ExpenseModalProps {
+  opened: boolean;
+  onClose: () => void;
+  onRegisterExpense: (payload: { type: string; amount: number; description: string }) => void;
+  activeShift?: Shift;
+}
+
+const EXPENSE_TYPES = [
+  { label: "Sueldo", value: "sueldo" },
+  { label: "Flete", value: "flete" },
+  { label: "Proveedor", value: "proveedor" },
+  { label: "Otro", value: "otro" }
+];
+
+const ExpenseModal = ({ opened, onClose, onRegisterExpense, activeShift }: ExpenseModalProps) => {
+  const [expenseType, setExpenseType] = useState<string>("sueldo");
+  const [amount, setAmount] = useState<number | undefined>(undefined);
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (!opened) {
+      setExpenseType("sueldo");
+      setAmount(undefined);
+      setDescription("");
+    }
+  }, [opened]);
+
+  const handleSubmit = () => {
+    if (!amount || amount <= 0) {
+      notifications.show({
+        title: "Error",
+        message: "El monto debe ser mayor a 0",
+        color: "red"
+      });
+      return;
+    }
+
+    onRegisterExpense({
+      type: expenseType,
+      amount,
+      description
+    });
+    onClose();
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Registrar gasto del turno" centered>
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          Este gasto se descontará automáticamente del efectivo esperado del turno.
+        </Text>
+
+        <Select
+          label="Tipo de Gasto"
+          placeholder="Selecciona el tipo"
+          data={EXPENSE_TYPES}
+          value={expenseType}
+          onChange={(value) => setExpenseType(value || "sueldo")}
+          required
+        />
+
+        <NumberInput
+          label="Monto"
+          placeholder="Ej: 50000"
+          value={amount}
+          onChange={(value) => setAmount(typeof value === "number" ? value : undefined)}
+          min={0}
+          prefix="$"
+          thousandSeparator="."
+          decimalSeparator=","
+          required
+        />
+
+        <TextInput
+          label="Descripción (opcional)"
+          placeholder="Detalles adicionales..."
+          value={description}
+          onChange={(event) => setDescription(event.currentTarget.value)}
+          maxLength={200}
+        />
+
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} leftSection={<Plus size={18} />} color="orange">
+            Registrar Gasto
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+};
+
 interface PasswordModalProps {
   opened: boolean;
   onClose: () => void;
@@ -832,29 +926,7 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
                         size="md"
                       />
 
-                      <Paper withBorder p="sm" radius="md" style={{ background: "rgba(99,102,241,0.05)" }}>
-                        <Stack gap="xs">
-                          <Group justify="space-between">
-                            <Text size="sm" c="dimmed">Efectivo Esperado</Text>
-                            <Text fw={600}>{formatCurrency(summary.cashExpected)}</Text>
-                          </Group>
-                          <Divider />
-                          <Group justify="space-between">
-                            <Text fw={600}>Diferencia</Text>
-                            <Text
-                              fw={700}
-                              size="lg"
-                              c={countedValue !== undefined && countedValue - summary.cashExpected !== 0
-                                ? (countedValue - summary.cashExpected > 0 ? "teal" : "red")
-                                : undefined}
-                            >
-                              {countedValue !== undefined
-                                ? formatCurrency(countedValue - summary.cashExpected)
-                                : "$0"}
-                            </Text>
-                          </Group>
-                        </Stack>
-                      </Paper>
+                      {/* Efectivo esperado OCULTO para evitar acomodo de montos */}
                     </Stack>
                   </Card>
                 </Stack>
@@ -1867,6 +1939,8 @@ const App = () => {
 
   const [clientModalOpened, clientModalHandlers] = useDisclosure(false);
 
+  const [expenseModalOpened, expenseModalHandlers] = useDisclosure(false);
+
   // Inventory states
   const [inventorySearch, setInventorySearch] = useState("");
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState<string | null>(null);
@@ -2488,7 +2562,9 @@ const App = () => {
     if (!activeShift) return;
     const summary = computeShiftSummary(sales, activeShift.id);
     const initialCash = activeShift.initial_cash ?? 0;
-    const cashExpected = initialCash + (summary.byPayment.cash ?? 0);
+    const totalExpenses = activeShift.total_expenses ?? 0;
+    // Efectivo esperado = inicial + ventas en efectivo - gastos del turno
+    const cashExpected = initialCash + (summary.byPayment.cash ?? 0) - totalExpenses;
     const difference = cashCounted - cashExpected;
     const { error } = await supabase
       .from("elianamaipu_shifts")
@@ -2521,6 +2597,41 @@ const App = () => {
 
     await queryClient.invalidateQueries({ queryKey: ["shifts"] });
     shiftModalHandlers.close();
+  };
+
+  const handleRegisterExpense = async ({ type, amount, description }: { type: string; amount: number; description: string }) => {
+    if (!activeShift) {
+      notifications.show({
+        title: "Error",
+        message: "No hay un turno activo para registrar el gasto.",
+        color: "red"
+      });
+      return;
+    }
+
+    const { error } = await supabase.from("elianamaipu_expenses").insert({
+      shift_id: activeShift.id,
+      type,
+      amount,
+      description: description || null
+    });
+
+    if (error) {
+      notifications.show({
+        title: "No se pudo registrar el gasto",
+        message: error.message,
+        color: "red"
+      });
+      return;
+    }
+
+    notifications.show({
+      title: "Gasto registrado",
+      message: `${type}: ${formatCurrency(amount)}`,
+      color: "orange"
+    });
+
+    await queryClient.invalidateQueries({ queryKey: ["shifts"] });
   };
 
   const handleCreateProduct = async (payload: ProductInput) => {
@@ -3094,27 +3205,6 @@ const App = () => {
                       </Text>
                       <Text fw={700}>{shiftSummary.tickets}</Text>
                     </Group>
-                    <Divider />
-                    <Group justify="space-between">
-                      <Text size="sm" c="dimmed" fw={600}>
-                        Efectivo en caja
-                      </Text>
-                      <Text fw={700} c="teal">
-                        {formatCurrency((activeShift.initial_cash ?? 0) + (shiftSummary.byPayment.cash ?? 0))}
-                      </Text>
-                    </Group>
-                    <Text size="xs" c="dimmed" pl="xs">
-                      Inicial: {formatCurrency(activeShift.initial_cash ?? 0)} + Ventas: {formatCurrency(shiftSummary.byPayment.cash ?? 0)}
-                    </Text>
-                    <Divider />
-                    {PAYMENT_ORDER.map((method) => (
-                      <Group key={method} justify="space-between">
-                        <Text size="xs" c="dimmed">
-                          {PAYMENT_LABELS[method].toUpperCase()}
-                        </Text>
-                        <Text fw={600}>{formatCurrency(shiftSummary.byPayment[method] ?? 0)}</Text>
-                      </Group>
-                    ))}
                   </Stack>
                 ) : (
                   <Stack gap="xs">
@@ -3505,6 +3595,16 @@ const App = () => {
                                   <RefreshCcw size={18} />
                                 </ActionIcon>
                               </Tooltip>
+                              <Tooltip label="Registrar gasto del turno">
+                                <ActionIcon
+                                  variant="light"
+                                  color="orange"
+                                  onClick={() => expenseModalHandlers.open()}
+                                  disabled={!activeShift}
+                                >
+                                  <DollarSign size={18} />
+                                </ActionIcon>
+                              </Tooltip>
                             </Group>
                           </Group>
                           {cartDetailed.length === 0 ? (
@@ -3810,6 +3910,13 @@ const App = () => {
         activeShift={activeShift}
         sales={sales}
         products={products}
+      />
+
+      <ExpenseModal
+        opened={expenseModalOpened}
+        onClose={expenseModalHandlers.close}
+        onRegisterExpense={handleRegisterExpense}
+        activeShift={activeShift}
       />
 
       <ClientModal
