@@ -5857,10 +5857,15 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
                         EFECTIVO EN CAJA
                       </Text>
                       <Text fw={700} size="xl" c="teal">
-                        {formatCurrency((activeShift.initial_cash ?? 0) + (summary.byPayment.cash ?? 0))}
+                        {formatCurrency(
+                          (activeShift.initial_cash ?? 0) +
+                          (summary.byPayment.cash ?? 0) -
+                          activeShiftExpenses.reduce((sum, exp) => sum + exp.amount, 0)
+                        )}
                       </Text>
                       <Text size="xs" c="dimmed">
                         Inicial: {formatCurrency(activeShift.initial_cash ?? 0)}
+                        {activeShiftExpenses.length > 0 && ` - Gastos: ${formatCurrency(activeShiftExpenses.reduce((sum, exp) => sum + exp.amount, 0))}`}
                       </Text>
                     </Stack>
                   </Paper>
