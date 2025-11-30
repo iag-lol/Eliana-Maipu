@@ -2923,12 +2923,26 @@ const App = () => {
       return;
     }
 
+    // Actualizar el total_expenses del turno activo
+    const currentTotalExpenses = activeShift.total_expenses ?? 0;
+    const newTotalExpenses = currentTotalExpenses + amount;
+
+    const { error: updateError } = await supabase
+      .from("elianamaipu_shifts")
+      .update({ total_expenses: newTotalExpenses })
+      .eq("id", activeShift.id);
+
+    if (updateError) {
+      console.warn("No se pudo actualizar total_expenses del turno:", updateError.message);
+    }
+
     notifications.show({
       title: "Gasto registrado",
       message: `${type}: ${formatCurrency(amount)}`,
       color: "orange"
     });
 
+    await queryClient.invalidateQueries({ queryKey: ["expenses"] });
     await queryClient.invalidateQueries({ queryKey: ["shifts"] });
   };
 
