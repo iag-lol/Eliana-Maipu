@@ -5656,6 +5656,17 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
     if (!activeShift) return [];
     return stockChanges.filter((change) => change.shift_id === activeShift.id);
   }, [stockChanges, activeShift]);
+
+  // Función para obtener gastos de un turno específico
+  const getShiftExpenses = (shiftId: string) => {
+    return expenses.filter((exp) => exp.shift_id === shiftId);
+  };
+
+  // Función para obtener cambios de stock de un turno específico
+  const getShiftStockChanges = (shiftId: string) => {
+    return stockChanges.filter((change) => change.shift_id === shiftId);
+  };
+
   const closedCount = history.length;
   const totalSales = history.reduce((acc, shift) => acc + (shift.total_sales ?? 0), 0);
   const totalDifferences = history.reduce((acc, shift) => acc + (shift.difference ?? 0), 0);
@@ -6044,6 +6055,8 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
             <Accordion variant="separated" radius="md">
               {history.map((shift) => {
                 const shiftProducts = getShiftProducts(shift.id);
+                const shiftExpenses = getShiftExpenses(shift.id);
+                const shiftStockChanges = getShiftStockChanges(shift.id);
                 const diffAmount = shift.difference ?? 0;
 
                 return (
@@ -6232,6 +6245,110 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
                                   </Table.Tbody>
                                 </Table>
                               </ScrollArea>
+                            </Stack>
+                          </Paper>
+                        )}
+
+                        {/* Gastos del Turno */}
+                        {shiftExpenses.length > 0 && (
+                          <Paper withBorder p="md" radius="md" style={{ background: "rgba(251, 146, 60, 0.08)" }}>
+                            <Stack gap="sm">
+                              <Group justify="space-between">
+                                <Group gap="xs">
+                                  <DollarSign size={18} style={{ color: "var(--mantine-color-orange-6)" }} />
+                                  <Text fw={600} c="orange">
+                                    Gastos Registrados
+                                  </Text>
+                                </Group>
+                                <Badge color="orange" variant="light">
+                                  {formatCurrency(shiftExpenses.reduce((sum, exp) => sum + exp.amount, 0))}
+                                </Badge>
+                              </Group>
+                              <Divider />
+                              <Table highlightOnHover>
+                                <Table.Thead>
+                                  <Table.Tr>
+                                    <Table.Th>Tipo</Table.Th>
+                                    <Table.Th>Descripción</Table.Th>
+                                    <Table.Th style={{ textAlign: "right" }}>Monto</Table.Th>
+                                  </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                  {shiftExpenses.map((expense) => (
+                                    <Table.Tr key={expense.id}>
+                                      <Table.Td>
+                                        <Badge size="sm" variant="dot" color="orange">
+                                          {expense.type}
+                                        </Badge>
+                                      </Table.Td>
+                                      <Table.Td>
+                                        <Text size="sm" c="dimmed">
+                                          {expense.description || "-"}
+                                        </Text>
+                                      </Table.Td>
+                                      <Table.Td style={{ textAlign: "right" }}>
+                                        <Text fw={600}>{formatCurrency(expense.amount)}</Text>
+                                      </Table.Td>
+                                    </Table.Tr>
+                                  ))}
+                                </Table.Tbody>
+                              </Table>
+                            </Stack>
+                          </Paper>
+                        )}
+
+                        {/* Modificaciones de Stock */}
+                        {shiftStockChanges.length > 0 && (
+                          <Paper withBorder p="md" radius="md" style={{ background: "rgba(16, 185, 129, 0.08)" }}>
+                            <Stack gap="sm">
+                              <Group justify="space-between">
+                                <Group gap="xs">
+                                  <Package size={18} style={{ color: "var(--mantine-color-teal-6)" }} />
+                                  <Text fw={600} c="teal">
+                                    Modificaciones de Stock
+                                  </Text>
+                                </Group>
+                                <Badge color="teal" variant="light">
+                                  {shiftStockChanges.length} cambios
+                                </Badge>
+                              </Group>
+                              <Divider />
+                              <Table highlightOnHover>
+                                <Table.Thead>
+                                  <Table.Tr>
+                                    <Table.Th>Producto</Table.Th>
+                                    <Table.Th>Cantidad</Table.Th>
+                                    <Table.Th>Stock</Table.Th>
+                                    <Table.Th>Usuario</Table.Th>
+                                  </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                  {shiftStockChanges.map((change) => (
+                                    <Table.Tr key={change.id}>
+                                      <Table.Td>
+                                        <Text size="sm" fw={500}>
+                                          {change.product_name}
+                                        </Text>
+                                      </Table.Td>
+                                      <Table.Td>
+                                        <Badge color="teal" variant="light">
+                                          +{change.quantity_added}
+                                        </Badge>
+                                      </Table.Td>
+                                      <Table.Td>
+                                        <Text size="sm" c="dimmed">
+                                          {change.stock_before} → {change.stock_after}
+                                        </Text>
+                                      </Table.Td>
+                                      <Table.Td>
+                                        <Text size="sm" c="dimmed">
+                                          {change.modified_by}
+                                        </Text>
+                                      </Table.Td>
+                                    </Table.Tr>
+                                  ))}
+                                </Table.Tbody>
+                              </Table>
                             </Stack>
                           </Paper>
                         )}
