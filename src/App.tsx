@@ -105,6 +105,7 @@ import {
 } from "./types";
 import { FALLBACK_CLIENTS, FALLBACK_PRODUCTS, FALLBACK_SALES, FALLBACK_SHIFTS } from "./data/fallback";
 import { formatCurrency, formatDate, formatDateTime, formatTime } from "./utils/format";
+import { generateShiftPDF } from "./utils/generateShiftPDF";
 
 dayjs.extend(relativeTime);
 dayjs.locale("es");
@@ -684,6 +685,192 @@ const ExpenseModal = ({ opened, onClose, onRegisterExpense, activeShift }: Expen
           </Button>
           <Button onClick={handleSubmit} leftSection={<Plus size={18} />} color="orange">
             Registrar Gasto
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+};
+
+interface QuickStockModalProps {
+  opened: boolean;
+  onClose: () => void;
+  onAddStock: (payload: { productId: string; quantity: number; productName: string; stockBefore: number }) => void;
+  products: Product[];
+  activeShift?: Shift;
+}
+
+const QuickStockModal = ({ opened, onClose, onAddStock, products, activeShift }: QuickStockModalProps) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [quantity, setQuantity] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!opened) {
+      setSearchTerm("");
+      setSelectedProduct(null);
+      setQuantity(undefined);
+    }
+  }, [opened]);
+
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    const term = searchTerm.toLowerCase();
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(term) ||
+        p.category.toLowerCase().includes(term) ||
+        (p.barcode && p.barcode.includes(term))
+    );
+  }, [products, searchTerm]);
+
+  const handleSubmit = () => {
+    if (!selectedProduct) {
+      notifications.show({
+        title: "Error",
+        message: "Debes seleccionar un producto",
+        color: "red"
+      });
+      return;
+    }
+
+    if (!quantity || quantity <= 0) {
+      notifications.show({
+        title: "Error",
+        message: "La cantidad debe ser mayor a 0",
+        color: "red"
+      });
+      return;
+    }
+
+    if (!activeShift) {
+      notifications.show({
+        title: "Sin turno activo",
+        message: "Debes tener un turno abierto para agregar stock",
+        color: "orange"
+      });
+      return;
+    }
+
+    onAddStock({
+      productId: selectedProduct.id,
+      quantity,
+      productName: selectedProduct.name,
+      stockBefore: selectedProduct.stock
+    });
+    onClose();
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Agregar stock rápido" centered size="lg">
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          Busca el producto y agrega la cantidad de stock recibido. Los cambios quedarán registrados en el turno.
+        </Text>
+
+        <TextInput
+          label="Buscar producto"
+          placeholder="Nombre, categoría o código de barras..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.currentTarget.value);
+            setSelectedProduct(null);
+          }}
+          leftSection={<Search size={18} />}
+          autoFocus
+        />
+
+        {searchTerm && filteredProducts.length > 0 && !selectedProduct && (
+          <ScrollArea h={200}>
+            <Stack gap="xs">
+              {filteredProducts.slice(0, 10).map((product) => (
+                <Paper
+                  key={product.id}
+                  withBorder
+                  p="sm"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => {
+                    setSelectedProduct(product);
+                    setSearchTerm(product.name);
+                  }}
+                >
+                  <Group justify="space-between">
+                    <div>
+                      <Text fw={600}>{product.name}</Text>
+                      <Text size="xs" c="dimmed">
+                        {product.category} • SKU: {product.barcode || "N/A"}
+                      </Text>
+                    </div>
+                    <Badge color={product.stock <= product.minStock ? "red" : "teal"}>
+                      Stock: {product.stock}
+                    </Badge>
+                  </Group>
+                </Paper>
+              ))}
+            </Stack>
+          </ScrollArea>
+        )}
+
+        {selectedProduct && (
+          <Paper withBorder p="md" radius="md" style={{ background: "rgba(16,185,129,0.05)" }}>
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <div>
+                  <Text fw={700} size="lg">
+                    {selectedProduct.name}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {selectedProduct.category}
+                  </Text>
+                </div>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    setSearchTerm("");
+                  }}
+                >
+                  <X size={18} />
+                </ActionIcon>
+              </Group>
+              <Divider />
+              <Group>
+                <Text size="sm" c="dimmed">
+                  Stock actual:
+                </Text>
+                <Badge size="lg" color={selectedProduct.stock <= selectedProduct.minStock ? "red" : "teal"}>
+                  {selectedProduct.stock} unidades
+                </Badge>
+              </Group>
+              <NumberInput
+                label="Cantidad a agregar"
+                placeholder="Ej: 10"
+                value={quantity}
+                onChange={(val) => setQuantity(typeof val === "number" ? val : undefined)}
+                min={1}
+                required
+                description={
+                  quantity && quantity > 0
+                    ? `Nuevo stock: ${selectedProduct.stock + quantity} unidades`
+                    : "Solo puedes AGREGAR stock (no reducir)"
+                }
+              />
+            </Stack>
+          </Paper>
+        )}
+
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            leftSection={<Plus size={18} />}
+            color="teal"
+            disabled={!selectedProduct || !quantity || quantity <= 0}
+          >
+            Agregar Stock
           </Button>
         </Group>
       </Stack>
@@ -1940,6 +2127,7 @@ const App = () => {
   const [clientModalOpened, clientModalHandlers] = useDisclosure(false);
 
   const [expenseModalOpened, expenseModalHandlers] = useDisclosure(false);
+  const [quickStockModalOpened, quickStockModalHandlers] = useDisclosure(false);
 
   // Inventory states
   const [inventorySearch, setInventorySearch] = useState("");
@@ -2632,6 +2820,137 @@ const App = () => {
     });
 
     await queryClient.invalidateQueries({ queryKey: ["shifts"] });
+  };
+
+  const handleQuickAddStock = async ({ productId, quantity }: { productId: string; quantity: number }) => {
+    if (!activeShift) {
+      notifications.show({
+        title: "Error",
+        message: "No hay un turno activo para registrar el cambio de stock.",
+        color: "red"
+      });
+      return;
+    }
+
+    const product = products.find((p) => p.id === productId);
+    if (!product) {
+      notifications.show({
+        title: "Error",
+        message: "Producto no encontrado.",
+        color: "red"
+      });
+      return;
+    }
+
+    const stockBefore = product.stock;
+    const stockAfter = stockBefore + quantity;
+
+    // 1. Actualizar stock del producto
+    const { error: updateError } = await supabase
+      .from("elianamaipu_products")
+      .update({ stock: stockAfter })
+      .eq("id", productId);
+
+    if (updateError) {
+      notifications.show({
+        title: "No se pudo actualizar el stock",
+        message: updateError.message,
+        color: "red"
+      });
+      return;
+    }
+
+    // 2. Registrar el cambio en la tabla de stock_changes
+    const { error: changeError } = await supabase.from("elianamaipu_stock_changes").insert({
+      shift_id: activeShift.id,
+      product_id: productId,
+      product_name: product.name,
+      quantity_added: quantity,
+      stock_before: stockBefore,
+      stock_after: stockAfter,
+      user: activeShift.seller
+    });
+
+    if (changeError) {
+      notifications.show({
+        title: "Stock actualizado pero no se registró el cambio",
+        message: changeError.message,
+        color: "orange"
+      });
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      return;
+    }
+
+    notifications.show({
+      title: "Stock actualizado",
+      message: `${product.name}: ${stockBefore} → ${stockAfter} unidades`,
+      color: "teal"
+    });
+
+    quickStockModalHandlers.close();
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["products"] }),
+      queryClient.invalidateQueries({ queryKey: ["stock-changes"] })
+    ]);
+  };
+
+  const handleDownloadShiftPDF = async (shift: Shift) => {
+    try {
+      // Fetch expenses for this shift
+      const { data: expenses, error: expensesError } = await supabase
+        .from("elianamaipu_expenses")
+        .select("*")
+        .eq("shift_id", shift.id)
+        .order("created_at", { ascending: false });
+
+      if (expensesError) {
+        notifications.show({
+          title: "Error al cargar gastos",
+          message: expensesError.message,
+          color: "red"
+        });
+        return;
+      }
+
+      // Fetch stock changes for this shift
+      const { data: stockChanges, error: stockChangesError } = await supabase
+        .from("elianamaipu_stock_changes")
+        .select("*")
+        .eq("shift_id", shift.id)
+        .order("created_at", { ascending: false });
+
+      if (stockChangesError) {
+        notifications.show({
+          title: "Error al cargar cambios de stock",
+          message: stockChangesError.message,
+          color: "red"
+        });
+        return;
+      }
+
+      // Get sales for this shift
+      const shiftSales = sales.filter((sale) => sale.shiftId === shift.id);
+
+      // Generate PDF
+      generateShiftPDF({
+        shift,
+        sales: shiftSales,
+        expenses: expenses || [],
+        stockChanges: stockChanges || []
+      });
+
+      notifications.show({
+        title: "PDF generado",
+        message: "El reporte del turno se ha descargado exitosamente.",
+        color: "teal"
+      });
+    } catch (error) {
+      notifications.show({
+        title: "Error al generar PDF",
+        message: error instanceof Error ? error.message : "Error desconocido",
+        color: "red"
+      });
+    }
   };
 
   const handleCreateProduct = async (payload: ProductInput) => {
@@ -3605,6 +3924,16 @@ const App = () => {
                                   <DollarSign size={18} />
                                 </ActionIcon>
                               </Tooltip>
+                              <Tooltip label="Agregar stock rápido">
+                                <ActionIcon
+                                  variant="light"
+                                  color="teal"
+                                  onClick={() => quickStockModalHandlers.open()}
+                                  disabled={!activeShift}
+                                >
+                                  <Package size={18} />
+                                </ActionIcon>
+                              </Tooltip>
                             </Group>
                           </Group>
                           {cartDetailed.length === 0 ? (
@@ -3832,6 +4161,7 @@ const App = () => {
                 history={shiftHistory}
                 sales={sales}
                 products={products}
+                onDownloadPDF={handleDownloadShiftPDF}
               />
             )}
           </Stack>
@@ -3916,6 +4246,14 @@ const App = () => {
         opened={expenseModalOpened}
         onClose={expenseModalHandlers.close}
         onRegisterExpense={handleRegisterExpense}
+        activeShift={activeShift}
+      />
+
+      <QuickStockModal
+        opened={quickStockModalOpened}
+        onClose={quickStockModalHandlers.close}
+        onAddStock={handleQuickAddStock}
+        products={products}
         activeShift={activeShift}
       />
 
@@ -5258,9 +5596,10 @@ interface ShiftsViewProps {
   history: Shift[];
   sales: Sale[];
   products: Product[];
+  onDownloadPDF: (shift: Shift) => void;
 }
 
-const ShiftsView = ({ activeShift, summary, history, sales, products }: ShiftsViewProps) => {
+const ShiftsView = ({ activeShift, summary, history, sales, products, onDownloadPDF }: ShiftsViewProps) => {
   const closedCount = history.length;
   const totalSales = history.reduce((acc, shift) => acc + (shift.total_sales ?? 0), 0);
   const totalDifferences = history.reduce((acc, shift) => acc + (shift.difference ?? 0), 0);
@@ -5740,6 +6079,17 @@ const ShiftsView = ({ activeShift, summary, history, sales, products }: ShiftsVi
                             </Stack>
                           </Paper>
                         )}
+
+                        {/* Botón de descarga de PDF */}
+                        <Button
+                          fullWidth
+                          variant="light"
+                          color="indigo"
+                          leftSection={<Receipt size={18} />}
+                          onClick={() => onDownloadPDF(shift)}
+                        >
+                          Descargar Reporte PDF
+                        </Button>
                       </Stack>
                     </Accordion.Panel>
                   </Accordion.Item>

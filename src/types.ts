@@ -73,6 +73,18 @@ export interface Expense {
   created_at: string;
 }
 
+export interface StockChange {
+  id: string;
+  shift_id: string;
+  product_id: string;
+  product_name: string;
+  quantity_added: number;
+  stock_before: number;
+  stock_after: number;
+  user: string;
+  created_at: string;
+}
+
 export interface Shift {
   id: string;
   seller: string;
