@@ -5055,265 +5055,253 @@ const DashboardView = ({
 
   return (
     <Stack gap="lg">
+      {/* Header del turno activo - Rediseñado */}
       {activeShift && (
-        <Card withBorder radius="lg" style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.18))" }}>
-          <Group justify="space-between" align="flex-start">
-            <Stack gap={4}>
-              <Text fw={700} fz="lg">
-                Turno activo • {activeShift.seller}
-              </Text>
-              <Text size="sm" c="dimmed">
-                {activeShift.type === "dia" ? "Turno diurno" : "Turno nocturno"} • Apertura {formatDateTime(activeShift.start)}
-              </Text>
-            </Stack>
-            <Badge color="blue" variant="light">
+        <Card
+          withBorder
+          radius="lg"
+          p="xl"
+          style={{
+            background: "linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))",
+            borderWidth: "2px"
+          }}
+        >
+          <Group justify="space-between" align="center">
+            <Group gap="lg">
+              <ThemeIcon size={60} radius="md" variant="light" color="blue">
+                <User size={32} />
+              </ThemeIcon>
+              <Stack gap={4}>
+                <Text fw={700} size="xl">
+                  {activeShift.seller}
+                </Text>
+                <Text size="sm" c="dimmed">
+                  {activeShift.type === "dia" ? "📅 Turno Día" : "🌙 Turno Noche"} • Desde {formatTime(activeShift.start)}
+                </Text>
+              </Stack>
+            </Group>
+            <Badge size="xl" variant="light" color="blue" style={{ padding: "12px 20px" }}>
               {shiftSales.length} movimientos
             </Badge>
           </Group>
         </Card>
       )}
 
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
-        <Paper withBorder radius="lg" p="md">
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              Total recaudado
-            </Text>
-            <Text fw={700} fz="xl">
+      {/* Métricas principales - Simplificado y más grande */}
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+        <Card
+          withBorder
+          radius="lg"
+          p="xl"
+          style={{
+            background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.12))",
+            borderColor: "rgba(16,185,129,0.3)",
+            borderWidth: "2px"
+          }}
+        >
+          <Stack gap="md">
+            <Group gap="xs">
+              <ThemeIcon size={36} radius="md" variant="light" color="teal">
+                <TrendingUp size={20} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed" fw={600} tt="uppercase">
+                Total Recaudado
+              </Text>
+            </Group>
+            <Text fw={700} size="32px" c="teal.7">
               {formatCurrency(shiftSummary.total)}
             </Text>
-            <Text size="xs" c="dimmed">
-              Incluye devoluciones: {formatCurrency(returnsTotal)}
-            </Text>
           </Stack>
-        </Paper>
-        <Paper withBorder radius="lg" p="md">
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              Tickets emitidos
-            </Text>
-            <Text fw={700} fz="xl">
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          p="xl"
+          style={{
+            background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(37,99,235,0.12))",
+            borderColor: "rgba(59,130,246,0.3)",
+            borderWidth: "2px"
+          }}
+        >
+          <Stack gap="md">
+            <Group gap="xs">
+              <ThemeIcon size={36} radius="md" variant="light" color="blue">
+                <Receipt size={20} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed" fw={600} tt="uppercase">
+                Tickets
+              </Text>
+            </Group>
+            <Text fw={700} size="32px" c="blue.7">
               {salesOnly.length}
             </Text>
-            <Text size="xs" c="dimmed">
-              Devoluciones registradas: {returns.length}
-            </Text>
+            {returns.length > 0 && (
+              <Text size="xs" c="dimmed">
+                {returns.length} devolución{returns.length > 1 ? "es" : ""}
+              </Text>
+            )}
           </Stack>
-        </Paper>
-        <Paper withBorder radius="lg" p="md">
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              Fiado del turno
+        </Card>
+
+        <Card
+          withBorder
+          radius="lg"
+          p="xl"
+          style={{
+            background: "linear-gradient(135deg, rgba(251,146,60,0.08), rgba(249,115,22,0.12))",
+            borderColor: "rgba(251,146,60,0.3)",
+            borderWidth: "2px"
+          }}
+        >
+          <Stack gap="md">
+            <Group gap="xs">
+              <ThemeIcon size={36} radius="md" variant="light" color="orange">
+                <AlertTriangle size={20} />
+              </ThemeIcon>
+              <Text size="sm" c="dimmed" fw={600} tt="uppercase">
+                Stock Crítico
+              </Text>
+            </Group>
+            <Text fw={700} size="32px" c="orange.7">
+              {lowStockSnapshot.length}
             </Text>
-            <Text fw={700} fz="xl">
-              {formatCurrency(fiadoTotal)}
-            </Text>
-            <Text size="xs" c="dimmed">
-              Controla los abonos desde la sección de fiados
-            </Text>
+            {lowStockSnapshot.length > 0 && (
+              <Text size="xs" c="dimmed">
+                Productos bajo stock mínimo
+              </Text>
+            )}
           </Stack>
-        </Paper>
-        <Paper withBorder radius="lg" p="md">
-          <Stack gap={4}>
-            <Text size="sm" c="dimmed">
-              Consumo interno
-            </Text>
-            <Text fw={700} fz="xl">
-              {formatCurrency(staffTotal)}
-            </Text>
-            <Text size="xs" c="dimmed">
-              Ventas registradas como consumo del personal
-            </Text>
-          </Stack>
-        </Paper>
+        </Card>
       </SimpleGrid>
 
-      <Grid gutter="md">
-        <Grid.Col span={{ base: 12, lg: 7 }}>
-          <Card withBorder radius="lg">
-            <Stack gap="md">
-              <Group justify="space-between">
-                <Text fw={700}>Movimientos del turno</Text>
-                <Badge variant="light" color="indigo">
-                  {latestOperations.length}
-                </Badge>
-              </Group>
-              {latestOperations.length === 0 ? (
-                <Text c="dimmed" ta="center">
-                  Aún no hay ventas registradas en este turno.
-                </Text>
-              ) : (
-                <ScrollArea h={260}>
-                  <Table highlightOnHover>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>Ticket</Table.Th>
-                        <Table.Th>Hora</Table.Th>
-                        <Table.Th>Tipo</Table.Th>
-                        <Table.Th>Método</Table.Th>
-                        <Table.Th>Total</Table.Th>
-                        <Table.Th>Acciones</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {latestOperations.map((sale) => {
-                        const payment = PAYMENT_OPTIONS.find((option) => option.id === sale.paymentMethod);
-                        return (
-                          <Table.Tr key={sale.id}>
-                            <Table.Td>#{sale.ticket}</Table.Td>
-                            <Table.Td>{formatTime(sale.created_at)}</Table.Td>
-                            <Table.Td>
-                              <Badge color={sale.type === "sale" ? "teal" : "red"} variant="light">
-                                {sale.type === "sale" ? "Venta" : "Devolución"}
-                              </Badge>
-                            </Table.Td>
-                            <Table.Td>{payment?.label ?? sale.paymentMethod.toUpperCase()}</Table.Td>
-                            <Table.Td>{formatCurrency(sale.total)}</Table.Td>
-                            <Table.Td>
-                              {sale.type === "sale" && (
-                                <Button
-                                  variant="light"
-                                  size="xs"
-                                  onClick={() => onEditSale(sale.id)}
-                                >
-                                  Ajustar método
-                                </Button>
-                              )}
-                            </Table.Td>
-                          </Table.Tr>
-                        );
-                      })}
-                    </Table.Tbody>
-                  </Table>
-                </ScrollArea>
-              )}
-            </Stack>
-          </Card>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, lg: 5 }}>
-          <Card withBorder radius="lg">
-            <Stack gap="md">
-              <Text fw={700}>Cobros por método</Text>
-              {paymentData.length === 0 ? (
-                <Text c="dimmed" ta="center">
-                  Registra ventas para visualizar el detalle.
-                </Text>
-              ) : (
-                <div style={{ width: "100%", height: 220 }}>
-                  <ResponsiveContainer>
-                    <PieChart>
-                      <Pie data={paymentData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={90} paddingAngle={4}>
-                        {paymentData.map((entry) => (
-                          <Cell key={entry.method} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <ChartTooltip formatter={(value: number) => formatCurrency(value)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              <Stack gap="xs">
-                {paymentData.map((entry) => (
-                  <Group key={entry.method} justify="space-between">
-                    <Text size="sm">{entry.name}</Text>
-                    <Text fw={600} size="sm">
-                      {formatCurrency(entry.value)}
-                    </Text>
-                  </Group>
-                ))}
-              </Stack>
-            </Stack>
-          </Card>
-        </Grid.Col>
-      </Grid>
-
-      <Grid gutter="md">
-        <Grid.Col span={{ base: 12, md: 6 }}>
-          <Card withBorder radius="lg">
-            <Stack gap="md">
-              <Group gap="xs">
-                <TrendingUp size={18} />
-                <Text fw={700}>Top productos del turno</Text>
-              </Group>
-              {topProducts.length === 0 ? (
-                <Text c="dimmed" ta="center">
-                  Sin ventas registradas.
-                </Text>
-              ) : (
-                <Stack gap="sm">
-                  {topProducts.map((item, index) => (
-                    <Group key={item.name} justify="space-between">
-                      <Group gap="xs">
-                        <Badge color="indigo" variant="light">
-                          {index + 1}
-                        </Badge>
-                        <div>
-                          <Text fw={600}>{item.name}</Text>
-                          <Text size="xs" c="dimmed">{item.quantity} unidades</Text>
-                        </div>
-                      </Group>
-                      <Text fw={700}>{formatCurrency(item.revenue)}</Text>
-                    </Group>
-                  ))}
-                </Stack>
-              )}
-            </Stack>
-          </Card>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 6 }}>
-          <Card withBorder radius="lg">
-            <Stack gap="md">
-              <Group gap="xs">
-                <AlertTriangle size={18} />
-                <Text fw={700}>Inventario a vigilar</Text>
-              </Group>
-              {lowStockSnapshot.length === 0 ? (
-                <Text c="dimmed" ta="center">
-                  Sin alertas de stock.
-                </Text>
-              ) : (
-                <Stack gap="sm">
-                  {lowStockSnapshot.map((product) => (
-                    <Group key={product.id} justify="space-between">
-                      <Text>{product.name}</Text>
-                      <Badge color="orange" variant="light">
-                        {product.stock} uds.
-                      </Badge>
-                    </Group>
-                  ))}
-                </Stack>
-              )}
-            </Stack>
-          </Card>
-        </Grid.Col>
-      </Grid>
-
+      {/* Movimientos recientes - Más prominente */}
       <Card withBorder radius="lg">
         <Stack gap="md">
-          <Group gap="xs">
-            <PiggyBank size={18} />
-            <Text fw={700}>Clientes con saldo pendiente</Text>
+          <Group justify="space-between">
+            <Group gap="xs">
+              <ShoppingBag size={22} />
+              <Title order={3}>Últimas Ventas</Title>
+            </Group>
+            <Badge variant="light" color="indigo" size="lg">
+              {latestOperations.length} operaciones
+            </Badge>
           </Group>
-          {clientsWithDebt.length === 0 ? (
-            <Text c="dimmed" ta="center">
-              Sin deudas registradas.
-            </Text>
+          <Divider />
+          {latestOperations.length === 0 ? (
+            <Paper withBorder p="xl" radius="md">
+              <Text c="dimmed" ta="center" size="lg">
+                Aún no hay ventas registradas en este turno
+              </Text>
+            </Paper>
           ) : (
-            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="sm">
-              {clientsWithDebt.map((client) => (
-                <Paper key={client.id} withBorder radius="md" p="sm">
-                  <Stack gap={2}>
-                    <Text fw={600} size="sm">{client.name}</Text>
-                    <Text size="xs" c="dimmed">
-                      Saldo: {formatCurrency(client.balance)}
+            <ScrollArea h={380}>
+              <Table highlightOnHover striped withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Ticket</Table.Th>
+                    <Table.Th>Hora</Table.Th>
+                    <Table.Th>Tipo</Table.Th>
+                    <Table.Th>Método</Table.Th>
+                    <Table.Th style={{ textAlign: "right" }}>Total</Table.Th>
+                    <Table.Th>Acciones</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {latestOperations.map((sale) => {
+                    const payment = PAYMENT_OPTIONS.find((option) => option.id === sale.paymentMethod);
+                    return (
+                      <Table.Tr key={sale.id}>
+                        <Table.Td>
+                          <Text fw={600}>#{sale.ticket}</Text>
+                        </Table.Td>
+                        <Table.Td>{formatTime(sale.created_at)}</Table.Td>
+                        <Table.Td>
+                          <Badge color={sale.type === "sale" ? "teal" : "red"} variant="light">
+                            {sale.type === "sale" ? "Venta" : "Devolución"}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge variant="dot">
+                            {payment?.label ?? sale.paymentMethod.toUpperCase()}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td style={{ textAlign: "right" }}>
+                          <Text fw={700} size="lg">
+                            {formatCurrency(sale.total)}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          {sale.type === "sale" && (
+                            <Button
+                              variant="light"
+                              size="xs"
+                              onClick={() => onEditSale(sale.id)}
+                            >
+                              Ajustar
+                            </Button>
+                          )}
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          )}
+        </Stack>
+      </Card>
+
+      {/* Top productos - Rediseñado */}
+      {topProducts.length > 0 && (
+        <Card withBorder radius="lg">
+          <Stack gap="md">
+            <Group gap="xs">
+              <TrendingUp size={22} />
+              <Title order={3}>Top Productos</Title>
+            </Group>
+            <Divider />
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="md">
+              {topProducts.map((item, index) => (
+                <Paper
+                  key={item.name}
+                  withBorder
+                  p="md"
+                  radius="md"
+                  style={{
+                    background: index === 0
+                      ? "linear-gradient(135deg, rgba(251,191,36,0.1), rgba(245,158,11,0.15))"
+                      : undefined,
+                    borderWidth: index === 0 ? "2px" : "1px",
+                    borderColor: index === 0 ? "rgba(251,191,36,0.4)" : undefined
+                  }}
+                >
+                  <Stack gap="xs">
+                    <Group justify="space-between">
+                      <Badge
+                        size="lg"
+                        variant="filled"
+                        color={index === 0 ? "yellow" : "indigo"}
+                      >
+                        #{index + 1}
+                      </Badge>
+                      <Text size="xs" c="dimmed">
+                        {item.quantity} uds
+                      </Text>
+                    </Group>
+                    <Text fw={700} size="sm" lineClamp={2}>
+                      {item.name}
+                    </Text>
+                    <Text fw={700} size="xl" c="green.7">
+                      {formatCurrency(item.revenue)}
                     </Text>
                   </Stack>
                 </Paper>
               ))}
             </SimpleGrid>
-          )}
-        </Stack>
-      </Card>
+          </Stack>
+        </Card>
+      )}
     </Stack>
   );
 };
