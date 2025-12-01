@@ -1145,57 +1145,36 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
           {/* Contenido principal en 2 columnas */}
           <Box p="lg" style={{ maxHeight: "50vh", overflow: "auto" }}>
             <Grid gutter="md">
-              {/* Columna izquierda - Métodos de pago y Arqueo */}
+              {/* Columna izquierda - Arqueo de caja solamente */}
               <Grid.Col span={5}>
-                <Stack gap="md">
-                  {/* Métodos de pago */}
-                  <Card withBorder radius="lg" shadow="sm">
-                    <Stack gap="sm">
-                      <Text fw={700} size="sm" c="dimmed" tt="uppercase">Métodos de Pago</Text>
-                      <Divider />
-                      {Object.entries(summary.byPayment).map(([method, amount]) => {
-                        const percentage = summary.total > 0 ? (amount / summary.total * 100).toFixed(0) : "0";
-                        return (
-                          <Group key={method} justify="space-between">
-                            <Group gap="xs">
-                              <Badge size="sm" variant="dot" color="indigo">{method.toUpperCase()}</Badge>
-                              <Text size="sm" c="dimmed">{percentage}%</Text>
-                            </Group>
-                            <Text fw={700}>{formatCurrency(amount)}</Text>
-                          </Group>
-                        );
-                      })}
-                    </Stack>
-                  </Card>
+                <Card withBorder radius="lg" shadow="sm">
+                  <Stack gap="md">
+                    <Text fw={700} size="sm" c="dimmed" tt="uppercase">Arqueo de Caja</Text>
+                    <Divider />
 
-                  {/* Arqueo de caja */}
-                  <Card withBorder radius="lg" shadow="sm">
-                    <Stack gap="md">
-                      <Text fw={700} size="sm" c="dimmed" tt="uppercase">Arqueo de Caja</Text>
-                      <Divider />
+                    <NumberInput
+                      label="Efectivo Contado"
+                      placeholder="Ingresa el monto contado"
+                      value={cashCounted ?? undefined}
+                      onChange={(value) => {
+                        if (value === "" || value === null) {
+                          setCashCounted(undefined);
+                          return;
+                        }
+                        const parsed = typeof value === "number" ? value : Number(value);
+                        setCashCounted(Number.isFinite(parsed) ? parsed : undefined);
+                      }}
+                      min={0}
+                      thousandSeparator="."
+                      decimalSeparator=","
+                      size="md"
+                    />
 
-                      <NumberInput
-                        label="Efectivo Contado"
-                        placeholder="Ingresa el monto contado"
-                        value={cashCounted ?? undefined}
-                        onChange={(value) => {
-                          if (value === "" || value === null) {
-                            setCashCounted(undefined);
-                            return;
-                          }
-                          const parsed = typeof value === "number" ? value : Number(value);
-                          setCashCounted(Number.isFinite(parsed) ? parsed : undefined);
-                        }}
-                        min={0}
-                        thousandSeparator="."
-                        decimalSeparator=","
-                        size="md"
-                      />
-
-                      {/* Efectivo esperado OCULTO para evitar acomodo de montos */}
-                    </Stack>
-                  </Card>
-                </Stack>
+                    <Text size="xs" c="dimmed" ta="center">
+                      Ingresa únicamente el efectivo que contaste en caja
+                    </Text>
+                  </Stack>
+                </Card>
               </Grid.Col>
 
               {/* Columna derecha - Productos vendidos */}

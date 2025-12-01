@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS elianamaipu_expenses (
 );
 
 -- 2. Crear índices para mejorar rendimiento
-CREATE INDEX idx_expenses_shift_id ON elianamaipu_expenses(shift_id);
-CREATE INDEX idx_expenses_created_at ON elianamaipu_expenses(created_at);
+CREATE INDEX IF NOT EXISTS idx_expenses_shift_id ON elianamaipu_expenses(shift_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_created_at ON elianamaipu_expenses(created_at);
 
 -- 3. Agregar columna total_expenses a la tabla de turnos
 ALTER TABLE elianamaipu_shifts
