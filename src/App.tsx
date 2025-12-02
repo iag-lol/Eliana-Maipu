@@ -2818,12 +2818,27 @@ const App = () => {
 
   const handleCloseShift = async ({ cashCounted }: { cashCounted: number }) => {
     if (!activeShift) return;
+
+    // OBTENER GASTOS DIRECTAMENTE DESDE LA BASE DE DATOS
+    const { data: expensesData, error: expensesError } = await supabase
+      .from("elianamaipu_expenses")
+      .select("amount")
+      .eq("shift_id", activeShift.id);
+
+    if (expensesError) {
+      console.error("Error obteniendo gastos:", expensesError);
+    }
+
+    // Calcular el total de gastos sumando desde la BD
+    const totalExpenses = (expensesData || []).reduce((sum, exp) => sum + exp.amount, 0);
+
     const summary = computeShiftSummary(sales, activeShift.id);
     const initialCash = activeShift.initial_cash ?? 0;
-    const totalExpenses = activeShift.total_expenses ?? 0;
+
     // Efectivo esperado = inicial + ventas en efectivo - gastos del turno
     const cashExpected = initialCash + (summary.byPayment.cash ?? 0) - totalExpenses;
     const difference = cashCounted - cashExpected;
+
     const { error } = await supabase
       .from("elianamaipu_shifts")
       .update({
@@ -2834,7 +2849,8 @@ const App = () => {
         difference,
         total_sales: summary.total,
         tickets: summary.tickets,
-        payments_breakdown: summary.byPayment
+        payments_breakdown: summary.byPayment,
+        total_expenses: totalExpenses // Guardar el total calculado
       })
       .eq("id", activeShift.id);
 
