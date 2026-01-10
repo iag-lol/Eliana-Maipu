@@ -123,7 +123,7 @@ dayjs.locale("es");
 // Sistema de roles y contraseñas
 type Role = "admin" | "manager";
 
-const ADMIN_PASSWORD = "eliana152100"; // Acceso completo
+const ADMIN_PASSWORD = "Romeo2026"; // Acceso completo
 const MANAGER_PASSWORD = "selena1521"; // Solo dashboard, POS, inventario
 const SENSITIVE_ACTION_PASSWORD = "Beta2025"; // Requerida para gastos y stock rápido
 
@@ -2467,9 +2467,9 @@ const App = () => {
         // Calcular velocidad promedio de teclas
         const avgSpeed = keyTimes.length > 1
           ? keyTimes.reduce((acc, val, idx, arr) => {
-              if (idx === 0) return 0;
-              return acc + (val - arr[idx - 1]);
-            }, 0) / (keyTimes.length - 1)
+            if (idx === 0) return 0;
+            return acc + (val - arr[idx - 1]);
+          }, 0) / (keyTimes.length - 1)
           : 0;
 
         console.log("⏱️ Velocidad promedio:", avgSpeed.toFixed(2), "ms");
@@ -2484,7 +2484,7 @@ const App = () => {
 
           // Limpiar cualquier input que pueda tener el foco
           if (document.activeElement instanceof HTMLInputElement ||
-              document.activeElement instanceof HTMLTextAreaElement) {
+            document.activeElement instanceof HTMLTextAreaElement) {
             document.activeElement.blur();
           }
 
@@ -2507,7 +2507,7 @@ const App = () => {
       // Verificar si el usuario está escribiendo en un input
       const activeElement = document.activeElement;
       const isTypingInInput = activeElement instanceof HTMLInputElement ||
-                              activeElement instanceof HTMLTextAreaElement;
+        activeElement instanceof HTMLTextAreaElement;
 
       // Limpiar timeout anterior
       if (resetTimeout) {
@@ -4389,23 +4389,23 @@ const App = () => {
         >
           <Stack gap="sm">
             <Grid gutter="xs">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const disabled = !hasAccess(tab);
-              return (
-                <Grid.Col key={tab.id} span={12 / TABS.length}>
-                  <Button
-                    variant={activeTab === tab.id ? "light" : "subtle"}
-                    fullWidth
-                    onClick={() => guardTabChange(tab.id)}
-                    leftSection={<Icon size={18} />}
-                    style={{ opacity: disabled ? 0.6 : 1 }}
-                  >
-                    {tab.label}
-                  </Button>
-                </Grid.Col>
-              );
-            })}
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const disabled = !hasAccess(tab);
+                return (
+                  <Grid.Col key={tab.id} span={12 / TABS.length}>
+                    <Button
+                      variant={activeTab === tab.id ? "light" : "subtle"}
+                      fullWidth
+                      onClick={() => guardTabChange(tab.id)}
+                      leftSection={<Icon size={18} />}
+                      style={{ opacity: disabled ? 0.6 : 1 }}
+                    >
+                      {tab.label}
+                    </Button>
+                  </Grid.Col>
+                );
+              })}
             </Grid>
             {userRole ? (
               <Button size="sm" variant="light" color="yellow" onClick={handleLockAdmin}>
@@ -6077,13 +6077,12 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
           withBorder
           radius="lg"
           style={{
-            background: `linear-gradient(135deg, ${
-              totalDifferences === 0
+            background: `linear-gradient(135deg, ${totalDifferences === 0
                 ? "var(--mantine-color-gray-6), var(--mantine-color-gray-4)"
                 : totalDifferences > 0
-                ? "var(--mantine-color-green-6), var(--mantine-color-green-4)"
-                : "var(--mantine-color-orange-6), var(--mantine-color-orange-4)"
-            })`
+                  ? "var(--mantine-color-green-6), var(--mantine-color-green-4)"
+                  : "var(--mantine-color-orange-6), var(--mantine-color-orange-4)"
+              })`
           }}
         >
           <Stack gap="xs">
