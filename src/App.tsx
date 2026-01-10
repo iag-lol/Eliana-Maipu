@@ -124,7 +124,7 @@ dayjs.locale("es");
 type Role = "admin" | "manager";
 
 const ADMIN_PASSWORD = "Romeo2026"; // Acceso completo
-const MANAGER_PASSWORD = "selena1521"; // Solo dashboard, POS, inventario
+
 const SENSITIVE_ACTION_PASSWORD = "Beta2025"; // Requerida para gastos y stock rápido
 
 type TabId = "dashboard" | "pos" | "inventory" | "fiados" | "reports" | "shifts";
@@ -983,14 +983,7 @@ const PasswordModal = ({ opened, onClose, onUnlock }: PasswordModalProps) => {
       });
       onUnlock("admin");
       onClose();
-    } else if (password === MANAGER_PASSWORD) {
-      notifications.show({
-        title: "Acceso administrativo concedido",
-        message: "Acceso a Dashboard, Punto de venta e Inventario.",
-        color: "blue"
-      });
-      onUnlock("manager");
-      onClose();
+
     } else {
       setError("Contraseña incorrecta. Inténtalo nuevamente.");
       notifications.show({
@@ -6078,10 +6071,10 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
           radius="lg"
           style={{
             background: `linear-gradient(135deg, ${totalDifferences === 0
-                ? "var(--mantine-color-gray-6), var(--mantine-color-gray-4)"
-                : totalDifferences > 0
-                  ? "var(--mantine-color-green-6), var(--mantine-color-green-4)"
-                  : "var(--mantine-color-orange-6), var(--mantine-color-orange-4)"
+              ? "var(--mantine-color-gray-6), var(--mantine-color-gray-4)"
+              : totalDifferences > 0
+                ? "var(--mantine-color-green-6), var(--mantine-color-green-4)"
+                : "var(--mantine-color-orange-6), var(--mantine-color-orange-4)"
               })`
           }}
         >
