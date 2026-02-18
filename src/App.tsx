@@ -221,18 +221,6 @@ const PAYMENT_LABELS: Record<PaymentMethod, string> = {
 
 const PAYMENT_ORDER: PaymentMethod[] = ["cash", "card", "transfer", "fiado", "staff"];
 
-const mapProductRow = (row: any): Product => ({
-  id: row.id,
-  name: row.name,
-  barcode: row.barcode,
-  category: row.category,
-  price: row.price ?? 0,
-  stock: row.stock ?? 0,
-  minStock: row.min_stock ?? 5,
-  created_at: row.created_at,
-  updated_at: row.updated_at
-});
-
 const toNumber = (value: unknown): number => {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   if (typeof value === "string") {
@@ -241,6 +229,34 @@ const toNumber = (value: unknown): number => {
   }
   return 0;
 };
+
+const normalizeString = (value: unknown, fallback: string) => {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  }
+  if (value === null || value === undefined) return fallback;
+  const coerced = String(value).trim();
+  return coerced.length > 0 ? coerced : fallback;
+};
+
+const normalizeBarcode = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
+};
+
+const mapProductRow = (row: any): Product => ({
+  id: row.id,
+  name: normalizeString(row.name, "Sin nombre"),
+  barcode: normalizeBarcode(row.barcode),
+  category: normalizeString(row.category, "Sin categoría"),
+  price: toNumber(row.price),
+  stock: toNumber(row.stock),
+  minStock: toNumber(row.min_stock ?? 5),
+  created_at: row.created_at,
+  updated_at: row.updated_at
+});
 
 const mapClientRow = (row: any): Client => {
   const limitValue = toNumber(row.limit);
@@ -2293,7 +2309,7 @@ const App = () => {
 
   // Obtener categorías únicas ordenadas alfabéticamente
   const uniqueCategories = useMemo(() => {
-    const categories = new Set(products.map((p) => p.category));
+    const categories = new Set(products.map((p) => normalizeString(p.category, "Sin categoría")));
     return Array.from(categories).sort();
   }, [products]);
 
@@ -2302,17 +2318,21 @@ const App = () => {
 
     // Filtrar por categoría si hay una seleccionada
     if (posCategoryFilter) {
-      filtered = filtered.filter((product) => product.category === posCategoryFilter);
+      filtered = filtered.filter(
+        (product) => normalizeString(product.category, "Sin categoría") === posCategoryFilter
+      );
     }
 
     // Filtrar por búsqueda si hay término
     if (search.trim()) {
       const term = search.toLowerCase();
       filtered = filtered.filter(
-        (product) =>
-          product.name.toLowerCase().includes(term) ||
-          product.category.toLowerCase().includes(term) ||
-          (product.barcode && product.barcode.includes(term))
+        (product) => {
+          const name = normalizeString(product.name, "").toLowerCase();
+          const category = normalizeString(product.category, "").toLowerCase();
+          const barcode = product.barcode ? String(product.barcode) : "";
+          return name.includes(term) || category.includes(term) || barcode.includes(term);
+        }
       );
     }
 
@@ -2326,7 +2346,10 @@ const App = () => {
 
   const lowStockProducts = useMemo(() => products.filter((product) => product.stock <= product.minStock), [products]);
 
-  const autoCompleteData = useMemo(() => Array.from(new Set(products.map((product) => product.name))), [products]);
+  const autoCompleteData = useMemo(
+    () => Array.from(new Set(products.map((product) => normalizeString(product.name, "Sin nombre")))),
+    [products]
+  );
 
   const guardTabChange = (tab: TabId) => {
     const target = TABS.find((item) => item.id === tab);
