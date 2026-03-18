@@ -131,11 +131,11 @@ export const generateShiftPDF = (data: ShiftPDFData) => {
       cash: "Efectivo",
       card: "Tarjeta",
       transfer: "Transferencia",
-      fiado: "Fiado",
-      staff: "Personal"
+      fiado: "Fiado"
     };
 
-    Object.entries(payments).forEach(([method, amount]) => {
+    ["cash", "card", "transfer", "fiado"].forEach((method) => {
+      const amount = payments[method as keyof typeof payments] ?? 0;
       if (amount > 0) {
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");

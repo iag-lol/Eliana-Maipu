@@ -76,6 +76,7 @@ import {
   LucideIcon,
   MonitorPlay,
   Moon,
+  Medal,
   Package,
   PiggyBank,
   Plus,
@@ -123,9 +124,9 @@ dayjs.locale("es");
 // Sistema de roles y contraseñas
 type Role = "admin" | "manager";
 
-const ADMIN_PASSWORD = "Romeo2026"; // Acceso completo
+const ADMIN_PASSWORD = "Zulu2026"; // Acceso completo
 
-const SENSITIVE_ACTION_PASSWORD = "Beta2025"; // Requerida para gastos y stock rápido
+const SENSITIVE_ACTION_PASSWORD = "Beta2025"; // Requerida para acciones sensibles (gastos)
 
 type TabId = "dashboard" | "pos" | "inventory" | "fiados" | "reports" | "shifts";
 
@@ -181,13 +182,6 @@ const PAYMENT_OPTIONS: PaymentOption[] = [
     description: "Asocia la venta a un cliente autorizado y actualiza su deuda.",
     icon: ShieldCheck,
     accent: "orange"
-  },
-  {
-    id: "staff",
-    label: "Consumo del personal",
-    description: "Controla consumos internos vinculados al turno activo.",
-    icon: BadgeCheck,
-    accent: "pink"
   }
 ];
 
@@ -208,7 +202,7 @@ const PAYMENT_COLORS: Record<PaymentMethod, string> = {
   card: "#4263eb",
   transfer: "#1098ad",
   fiado: "#f76707",
-  staff: "#e64980"
+  staff: "#12b886"
 };
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
@@ -216,10 +210,32 @@ const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   card: "Tarjeta",
   transfer: "Transferencia",
   fiado: "Fiado",
-  staff: "Consumo del personal"
+  staff: "Efectivo"
 };
 
-const PAYMENT_ORDER: PaymentMethod[] = ["cash", "card", "transfer", "fiado", "staff"];
+const PAYMENT_ORDER: PaymentMethod[] = ["cash", "card", "transfer", "fiado"];
+const DUPLICATE_SALE_WINDOW_MS = 60 * 1000;
+
+const getRankBadgeColor = (index: number) => {
+  if (index === 0) return "yellow";
+  if (index === 1) return "gray";
+  if (index === 2) return "orange";
+  return "indigo";
+};
+
+const normalizePaymentMethod = (value: unknown): PaymentMethod => {
+  const method = typeof value === "string" ? value.trim().toLowerCase() : "";
+
+  if (method === "cash" || method === "card" || method === "transfer" || method === "fiado") {
+    return method;
+  }
+
+  // "staff" (consumo personal legado) se migra a efectivo.
+  return "cash";
+};
+
+const areSameAmount = (a: number, b: number) => Math.round(a * 100) === Math.round(b * 100);
+const isPendingStockRequest = (change: StockChange) => change.quantity_added > 0 && change.stock_before === change.stock_after;
 
 const toNumber = (value: unknown): number => {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -285,8 +301,8 @@ const mapSaleRow = (row: any): Sale => ({
   id: row.id,
   ticket: row.ticket,
   type: row.type ?? "sale",
-  total: row.total ?? 0,
-  paymentMethod: row.payment_method ?? "cash",
+  total: toNumber(row.total),
+  paymentMethod: normalizePaymentMethod(row.payment_method),
   cashReceived: row.cash_received,
   change: row.change_amount,
   shiftId: row.shift_id,
@@ -767,45 +783,43 @@ const ExpenseModal = ({ opened, onClose, onRegisterExpense, activeShift }: Expen
   );
 };
 
-interface QuickStockModalProps {
+interface StockRequestModalProps {
   opened: boolean;
   onClose: () => void;
-  onAddStock: (payload: { productId: string; quantity: number; productName: string; stockBefore: number; password: string }) => void;
+  onRequestStock: (payload: { productId: string; quantity: number }) => Promise<boolean>;
   products: Product[];
   activeShift?: Shift;
 }
 
-const QuickStockModal = ({ opened, onClose, onAddStock, products, activeShift }: QuickStockModalProps) => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+const StockRequestModal = ({ opened, onClose, onRequestStock, products, activeShift }: StockRequestModalProps) => {
+  const [productId, setProductId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState<number | undefined>(undefined);
-  const [securityPassword, setSecurityPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!opened) {
-      setSearchTerm("");
-      setSelectedProduct(null);
+      setProductId(null);
       setQuantity(undefined);
-      setSecurityPassword("");
+      setIsSubmitting(false);
     }
   }, [opened]);
 
-  const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-    const term = searchTerm.toLowerCase();
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(term) ||
-        p.category.toLowerCase().includes(term) ||
-        (p.barcode && p.barcode.includes(term))
-    );
-  }, [products, searchTerm]);
+  const selectedProduct = products.find((item) => item.id === productId) ?? null;
 
-  const handleSubmit = () => {
-    if (!selectedProduct) {
+  const handleSubmit = async () => {
+    if (!activeShift) {
       notifications.show({
-        title: "Error",
-        message: "Debes seleccionar un producto",
+        title: "Sin turno activo",
+        message: "Debes tener un turno abierto para solicitar stock.",
+        color: "orange"
+      });
+      return;
+    }
+
+    if (!productId) {
+      notifications.show({
+        title: "Producto requerido",
+        message: "Debes seleccionar un producto.",
         color: "red"
       });
       return;
@@ -813,159 +827,80 @@ const QuickStockModal = ({ opened, onClose, onAddStock, products, activeShift }:
 
     if (!quantity || quantity <= 0) {
       notifications.show({
-        title: "Error",
-        message: "La cantidad debe ser mayor a 0",
+        title: "Cantidad inválida",
+        message: "La cantidad solicitada debe ser mayor a 0.",
         color: "red"
       });
       return;
     }
 
-    if (!activeShift) {
-      notifications.show({
-        title: "Sin turno activo",
-        message: "Debes tener un turno abierto para agregar stock",
-        color: "orange"
-      });
-      return;
+    setIsSubmitting(true);
+    try {
+      const created = await onRequestStock({ productId, quantity });
+      if (created) onClose();
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (securityPassword !== SENSITIVE_ACTION_PASSWORD) {
-      notifications.show({
-        title: "Contraseña requerida",
-        message: "Ingresa la contraseña correcta para modificar el stock.",
-        color: "red"
-      });
-      return;
-    }
-
-    onAddStock({
-      productId: selectedProduct.id,
-      quantity,
-      productName: selectedProduct.name,
-      stockBefore: selectedProduct.stock,
-      password: securityPassword
-    });
-    onClose();
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Agregar stock rápido" centered size="lg">
+    <Modal opened={opened} onClose={onClose} title="Solicitar aumento de stock" centered size="md">
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          Busca el producto y agrega la cantidad de stock recibido. Los cambios quedarán registrados en el turno.
+          Crea una solicitud para reposición de insumos. Se aprobará o rechazará desde inventario.
         </Text>
 
-        <TextInput
-          label="Buscar producto"
-          placeholder="Nombre, categoría o código de barras..."
-          value={searchTerm}
-          onChange={(e) => {
-            setSearchTerm(e.currentTarget.value);
-            setSelectedProduct(null);
-          }}
-          leftSection={<Search size={18} />}
-          autoFocus
+        <Select
+          label="Producto"
+          placeholder="Selecciona un producto"
+          data={[...products]
+            .sort((a, b) => a.name.localeCompare(b.name, "es"))
+            .map((product) => ({
+              value: product.id,
+              label: `${product.name} • Stock: ${product.stock}`
+            }))}
+          searchable
+          value={productId}
+          onChange={setProductId}
+          nothingFoundMessage="Sin coincidencias"
         />
 
-        {searchTerm && filteredProducts.length > 0 && !selectedProduct && (
-          <ScrollArea h={200}>
-            <Stack gap="xs">
-              {filteredProducts.slice(0, 10).map((product) => (
-                <Paper
-                  key={product.id}
-                  withBorder
-                  p="sm"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => {
-                    setSelectedProduct(product);
-                    setSearchTerm(product.name);
-                  }}
-                >
-                  <Group justify="space-between">
-                    <div>
-                      <Text fw={600}>{product.name}</Text>
-                      <Text size="xs" c="dimmed">
-                        {product.category} • SKU: {product.barcode || "N/A"}
-                      </Text>
-                    </div>
-                    <Badge color={product.stock <= product.minStock ? "red" : "teal"}>
-                      Stock: {product.stock}
-                    </Badge>
-                  </Group>
-                </Paper>
-              ))}
-            </Stack>
-          </ScrollArea>
-        )}
+        <NumberInput
+          label="Cantidad solicitada"
+          placeholder="Ej: 12"
+          value={quantity ?? undefined}
+          onChange={(value) => setQuantity(typeof value === "number" ? value : undefined)}
+          min={1}
+          required
+          description={
+            selectedProduct && quantity && quantity > 0
+              ? `Stock proyectado al aprobar: ${selectedProduct.stock + quantity}`
+              : "Ingresa cuántas unidades llegaron."
+          }
+        />
 
         {selectedProduct && (
-          <Paper withBorder p="md" radius="md" style={{ background: "rgba(16,185,129,0.05)" }}>
-            <Stack gap="sm">
-              <Group justify="space-between">
-                <div>
-                  <Text fw={700} size="lg">
-                    {selectedProduct.name}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    {selectedProduct.category}
-                  </Text>
-                </div>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  onClick={() => {
-                    setSelectedProduct(null);
-                    setSearchTerm("");
-                  }}
-                >
-                  <X size={18} />
-                </ActionIcon>
-              </Group>
-              <Divider />
-              <Group>
-                <Text size="sm" c="dimmed">
-                  Stock actual:
-                </Text>
-                <Badge size="lg" color={selectedProduct.stock <= selectedProduct.minStock ? "red" : "teal"}>
-                  {selectedProduct.stock} unidades
-                </Badge>
-              </Group>
-              <NumberInput
-                label="Cantidad a agregar"
-                placeholder="Ej: 10"
-                value={quantity}
-                onChange={(val) => setQuantity(typeof val === "number" ? val : undefined)}
-                min={1}
-                required
-                description={
-                  quantity && quantity > 0
-                    ? `Nuevo stock: ${selectedProduct.stock + quantity} unidades`
-                    : "Solo puedes AGREGAR stock (no reducir)"
-                }
-              />
-            </Stack>
+          <Paper withBorder p="sm" radius="md" style={{ background: "rgba(16,185,129,0.05)" }}>
+            <Group justify="space-between" align="center">
+              <Text fw={600}>{selectedProduct.name}</Text>
+              <Badge color={selectedProduct.stock <= selectedProduct.minStock ? "orange" : "teal"} variant="light">
+                Stock actual: {selectedProduct.stock}
+              </Badge>
+            </Group>
           </Paper>
         )}
 
-        <PasswordInput
-          label="Contraseña de autorización"
-          placeholder="Ingresa la contraseña"
-          value={securityPassword}
-          onChange={(event) => setSecurityPassword(event.currentTarget.value)}
-          required
-        />
-
         <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
+          <Button variant="default" onClick={onClose} disabled={isSubmitting}>
             Cancelar
           </Button>
           <Button
             onClick={handleSubmit}
-            leftSection={<Plus size={18} />}
-            color="teal"
-            disabled={!selectedProduct || !quantity || quantity <= 0}
+            leftSection={<Package size={16} />}
+            loading={isSubmitting}
+            disabled={!productId || !quantity || quantity <= 0}
           >
-            Agregar Stock
+            Enviar solicitud
           </Button>
         </Group>
       </Stack>
@@ -1090,7 +1025,7 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
       });
     });
 
-    return Array.from(productMap.values()).sort((a, b) => b.total - a.total);
+    return Array.from(productMap.values()).sort((a, b) => b.quantity - a.quantity || b.total - a.total);
   }, [activeShift, sales]);
 
   if (!opened) return null;
@@ -1200,6 +1135,7 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
                       <Table highlightOnHover withTableBorder>
                         <Table.Thead style={{ position: "sticky", top: 0, background: "white", zIndex: 1 }}>
                           <Table.Tr>
+                            <Table.Th style={{ textAlign: "center", width: 90 }}>Ranking</Table.Th>
                             <Table.Th>Producto</Table.Th>
                             <Table.Th style={{ textAlign: "center" }}>Cant.</Table.Th>
                             <Table.Th style={{ textAlign: "right" }}>Total</Table.Th>
@@ -1208,13 +1144,23 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
                         <Table.Tbody>
                           {shiftProducts.length === 0 ? (
                             <Table.Tr>
-                              <Table.Td colSpan={3} style={{ textAlign: "center", padding: "2rem" }}>
+                              <Table.Td colSpan={4} style={{ textAlign: "center", padding: "2rem" }}>
                                 <Text c="dimmed" size="sm">No hay productos vendidos</Text>
                               </Table.Td>
                             </Table.Tr>
                           ) : (
                             shiftProducts.map((product, index) => (
                               <Table.Tr key={index}>
+                                <Table.Td style={{ textAlign: "center" }}>
+                                  <Badge
+                                    size="sm"
+                                    variant="light"
+                                    color={getRankBadgeColor(index)}
+                                    leftSection={<Medal size={12} />}
+                                  >
+                                    #{index + 1}
+                                  </Badge>
+                                </Table.Td>
                                 <Table.Td>
                                   <Text size="sm" fw={500}>{product.name}</Text>
                                 </Table.Td>
@@ -1891,7 +1837,7 @@ const PaymentEditModal = ({ sale, opened, onClose, onSave }: PaymentEditModalPro
 
   useEffect(() => {
     if (sale) {
-      setMethod(sale.paymentMethod);
+      setMethod(sale.paymentMethod === "staff" ? "cash" : sale.paymentMethod);
     }
   }, [sale]);
 
@@ -2166,6 +2112,7 @@ const App = () => {
   };
 
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [isCompletingSale, setIsCompletingSale] = useState(false);
   const [search, setSearch] = useState("");
   const [posCategoryFilter, setPosCategoryFilter] = useState<string | null>(null);
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>("cash");
@@ -2195,6 +2142,7 @@ const App = () => {
 
   const [expenseModalOpened, expenseModalHandlers] = useDisclosure(false);
   const [quickStockModalOpened, quickStockModalHandlers] = useDisclosure(false);
+  const [stockRequestActionId, setStockRequestActionId] = useState<string | null>(null);
 
   // Inventory states
   const [inventorySearch, setInventorySearch] = useState("");
@@ -2221,6 +2169,30 @@ const App = () => {
       setPendingTab(null);
     }
   }, [userRole, pendingTab]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("inventory-live-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "elianamaipu_products" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["products"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "elianamaipu_stock_changes" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["stock-changes"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const productQuery = useQuery({
     queryKey: ["products"],
@@ -2253,7 +2225,9 @@ const App = () => {
 
   const stockChangesQuery = useQuery({
     queryKey: ["stock-changes"],
-    queryFn: fetchStockChanges
+    queryFn: fetchStockChanges,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true
   });
 
   const products = productQuery.data ?? [];
@@ -2262,6 +2236,13 @@ const App = () => {
   const shifts = shiftsQuery.data ?? [];
   const expenses = expensesQuery.data ?? [];
   const stockChanges = stockChangesQuery.data ?? [];
+  const pendingStockRequests = useMemo(
+    () =>
+      stockChanges
+        .filter(isPendingStockRequest)
+        .sort((a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf()),
+    [stockChanges]
+  );
   const activeShift = useMemo(() => shifts.find((shift) => shift.status === "open"), [shifts]);
   const shiftSummary = useMemo(() => computeShiftSummary(sales, activeShift?.id ?? null), [sales, activeShift]);
 
@@ -2307,6 +2288,15 @@ const App = () => {
     return salesMap;
   }, [sales]);
 
+  const productSalesRanking = useMemo(() => {
+    const ranking = [...products].sort((a, b) => {
+      const salesA = productSalesCount.get(a.id) || 0;
+      const salesB = productSalesCount.get(b.id) || 0;
+      return salesB - salesA || a.name.localeCompare(b.name, "es");
+    });
+    return new Map(ranking.map((product, index) => [product.id, index + 1]));
+  }, [products, productSalesCount]);
+
   // Obtener categorías únicas ordenadas alfabéticamente
   const uniqueCategories = useMemo(() => {
     const categories = new Set(products.map((p) => normalizeString(p.category, "Sin categoría")));
@@ -2340,7 +2330,7 @@ const App = () => {
     return [...filtered].sort((a, b) => {
       const salesA = productSalesCount.get(a.id) || 0;
       const salesB = productSalesCount.get(b.id) || 0;
-      return salesB - salesA;
+      return salesB - salesA || a.name.localeCompare(b.name, "es");
     });
   }, [products, search, posCategoryFilter, productSalesCount]);
 
@@ -2718,91 +2708,176 @@ const App = () => {
   };
 
   const handleCompleteSale = async () => {
+    if (isCompletingSale) return;
     if (!validateSale()) return;
 
-    const timestamp = new Date().toISOString();
-    const saleItems: SaleItem[] = cartDetailed.map((item) => ({
-      id: generateId(),
-      productId: item.product.id,
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity
-    }));
+    setIsCompletingSale(true);
 
-    const cashValue =
-      selectedPayment === "cash" && typeof cashReceived === "number" && Number.isFinite(cashReceived)
-        ? cashReceived
-        : null;
+    try {
+      const timestamp = new Date().toISOString();
+      const duplicateWindowStart = dayjs(timestamp).subtract(1, "minute").toISOString();
+      const saleItems: SaleItem[] = cartDetailed.map((item) => ({
+        id: generateId(),
+        productId: item.product.id,
+        name: item.product.name,
+        price: item.product.price,
+        quantity: item.quantity
+      }));
 
-    const payload = {
-      type: "sale",
-      total: cartTotals.total,
-      payment_method: selectedPayment,
-      cash_received: cashValue,
-      change_amount: cashValue !== null ? cartTotals.change : null,
-      shift_id: activeShift?.id ?? null,
-      seller: activeShift?.seller ?? "Mostrador",
-      created_at: timestamp,
-      items: saleItems,
-      notes: selectedPayment === "fiado" ? { clientId: selectedFiadoClient } : null
-    };
+      const cashValue =
+        selectedPayment === "cash" && typeof cashReceived === "number" && Number.isFinite(cashReceived)
+          ? cashReceived
+          : null;
 
-    const { data, error } = await supabase
-      .from("elianamaipu_sales")
-      .insert(payload)
-      .select("ticket")
-      .single();
+      const { data: recentSales, error: duplicateCheckError } = await supabase
+        .from("elianamaipu_sales")
+        .select("id, total, payment_method, created_at, type")
+        .eq("type", "sale")
+        .eq("payment_method", selectedPayment)
+        .gte("created_at", duplicateWindowStart)
+        .order("created_at", { ascending: false })
+        .limit(30);
 
-    if (error) {
-      notifications.show({
-        title: "Error al registrar la venta",
-        message: error.message,
-        color: "red"
-      });
-      return;
-    }
-
-    await Promise.all(
-      saleItems.map((item) =>
-        supabase
-          .from("elianamaipu_products")
-          .update({ stock: (productMap.get(item.productId)?.stock ?? 0) - item.quantity })
-          .eq("id", item.productId)
-      )
-    );
-
-    if (selectedPayment === "fiado" && selectedFiadoClient) {
-      const client = clients.find((item) => item.id === selectedFiadoClient);
-      if (client) {
-        const newBalance = client.balance + cartTotals.total;
-        await supabase
-          .from("elianamaipu_clients")
-          .update({ balance: newBalance })
-          .eq("id", client.id);
-        await supabase.from("elianamaipu_client_movements").insert({
-          client_id: client.id,
-          amount: cartTotals.total,
-          type: "fiado",
-          description: `Compra ticket #${data?.ticket ?? "sin-ticket"}`,
-          balance_after: newBalance
+      if (duplicateCheckError) {
+        notifications.show({
+          title: "No se pudo validar duplicados",
+          message: "No se registró la venta para evitar duplicidad. Intenta nuevamente.",
+          color: "red"
         });
+        return;
       }
+
+      const hasDuplicateBeforeInsert = (recentSales ?? []).some((sale) => {
+        if (!sale.created_at || typeof sale.created_at !== "string") return false;
+        const diffMs = Math.abs(dayjs(timestamp).diff(dayjs(sale.created_at), "millisecond"));
+        return (
+          normalizePaymentMethod(sale.payment_method) === selectedPayment &&
+          areSameAmount(toNumber(sale.total), cartTotals.total) &&
+          diffMs < DUPLICATE_SALE_WINDOW_MS
+        );
+      });
+
+      if (hasDuplicateBeforeInsert) {
+        notifications.show({
+          title: "Venta duplicada detectada",
+          message: "Mismo monto y medio de pago en menos de 1 minuto. Venta descartada.",
+          color: "orange"
+        });
+        return;
+      }
+
+      const payload = {
+        type: "sale",
+        total: cartTotals.total,
+        payment_method: selectedPayment,
+        cash_received: cashValue,
+        change_amount: cashValue !== null ? cartTotals.change : null,
+        shift_id: activeShift?.id ?? null,
+        seller: activeShift?.seller ?? "Mostrador",
+        created_at: timestamp,
+        items: saleItems,
+        notes: selectedPayment === "fiado" ? { clientId: selectedFiadoClient } : null
+      };
+
+      const { data, error } = await supabase
+        .from("elianamaipu_sales")
+        .insert(payload)
+        .select("id, ticket, created_at")
+        .single();
+
+      if (error) {
+        notifications.show({
+          title: "Error al registrar la venta",
+          message: error.message,
+          color: "red"
+        });
+        return;
+      }
+
+      const insertedSaleCreatedAt = data?.created_at && typeof data.created_at === "string" ? data.created_at : timestamp;
+
+      const { data: postInsertSales, error: postInsertCheckError } = await supabase
+        .from("elianamaipu_sales")
+        .select("id, total, payment_method, created_at, type")
+        .eq("type", "sale")
+        .eq("payment_method", selectedPayment)
+        .gte("created_at", duplicateWindowStart)
+        .order("created_at", { ascending: true })
+        .limit(30);
+
+      if (!postInsertCheckError) {
+        const hasConflict = (postInsertSales ?? []).some((sale) => {
+          if (!sale.created_at || typeof sale.created_at !== "string") return false;
+          if (sale.id === data?.id) return false;
+          const diffMs = Math.abs(dayjs(insertedSaleCreatedAt).diff(dayjs(sale.created_at), "millisecond"));
+          return (
+            normalizePaymentMethod(sale.payment_method) === selectedPayment &&
+            areSameAmount(toNumber(sale.total), cartTotals.total) &&
+            diffMs < DUPLICATE_SALE_WINDOW_MS
+          );
+        });
+
+        if (hasConflict && data?.id) {
+          await supabase
+            .from("elianamaipu_sales")
+            .delete()
+            .eq("id", data.id);
+
+          notifications.show({
+            title: "Venta duplicada eliminada",
+            message: "Se detectó duplicidad en menos de 1 minuto. La venta fue removida automáticamente.",
+            color: "orange"
+          });
+          return;
+        }
+      } else {
+        console.warn("No se pudo validar duplicidad post-registro:", postInsertCheckError.message);
+      }
+
+      await Promise.all(
+        saleItems.map((item) =>
+          supabase
+            .from("elianamaipu_products")
+            .update({ stock: (productMap.get(item.productId)?.stock ?? 0) - item.quantity })
+            .eq("id", item.productId)
+        )
+      );
+
+      if (selectedPayment === "fiado" && selectedFiadoClient) {
+        const client = clients.find((item) => item.id === selectedFiadoClient);
+        if (client) {
+          const newBalance = client.balance + cartTotals.total;
+          await supabase
+            .from("elianamaipu_clients")
+            .update({ balance: newBalance })
+            .eq("id", client.id);
+          await supabase.from("elianamaipu_client_movements").insert({
+            client_id: client.id,
+            amount: cartTotals.total,
+            type: "fiado",
+            description: `Compra ticket #${data?.ticket ?? "sin-ticket"}`,
+            balance_after: newBalance
+          });
+        }
+      }
+
+      notifications.show({
+        title: "Venta registrada",
+        message: data?.ticket ? `Ticket #${data.ticket} generado correctamente.` : "Venta registrada correctamente.",
+        color: "teal"
+      });
+
+      setCart([]);
+      setCashReceived(undefined);
+      setSelectedFiadoClient(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["sales"] }),
+        queryClient.invalidateQueries({ queryKey: ["clients"] })
+      ]);
+    } finally {
+      setIsCompletingSale(false);
     }
-
-    notifications.show({
-      title: "Venta registrada",
-      message: data?.ticket ? `Ticket #${data.ticket} generado correctamente.` : "Venta registrada correctamente.",
-      color: "teal"
-    });
-
-    setCart([]);
-    setCashReceived(undefined);
-    setSelectedFiadoClient(null);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["products"] }),
-      queryClient.invalidateQueries({ queryKey: ["sales"] }),
-      queryClient.invalidateQueries({ queryKey: ["clients"] })
-    ]);
   };
 
   const handleOpenShift = async ({ seller, type, initialCash }: { seller: string; type: ShiftType; initialCash: number }) => {
@@ -2957,95 +3032,235 @@ const App = () => {
     await queryClient.invalidateQueries({ queryKey: ["shifts"] });
   };
 
-  const handleQuickAddStock = async ({
+  const handleCreateStockRequest = async ({
     productId,
-    quantity,
-    password
+    quantity
   }: {
     productId: string;
     quantity: number;
-    password: string;
-    productName?: string;
-    stockBefore?: number;
-  }) => {
-    if (password !== SENSITIVE_ACTION_PASSWORD) {
-      notifications.show({
-        title: "Contraseña requerida",
-        message: "Debes ingresar la contraseña correcta para modificar el stock.",
-        color: "red"
-      });
-      return;
-    }
-
+  }): Promise<boolean> => {
     if (!activeShift) {
       notifications.show({
-        title: "Error",
-        message: "No hay un turno activo para registrar el cambio de stock.",
+        title: "Sin turno activo",
+        message: "No hay un turno activo para registrar la solicitud.",
         color: "red"
       });
-      return;
+      return false;
     }
 
     const product = products.find((p) => p.id === productId);
     if (!product) {
       notifications.show({
-        title: "Error",
-        message: "Producto no encontrado.",
+        title: "Producto no encontrado",
+        message: "No se pudo registrar la solicitud.",
         color: "red"
       });
-      return;
+      return false;
     }
 
-    const stockBefore = product.stock;
-    const stockAfter = stockBefore + quantity;
-
-    // 1. Actualizar stock del producto
-    const { error: updateError } = await supabase
-      .from("elianamaipu_products")
-      .update({ stock: stockAfter })
-      .eq("id", productId);
-
-    if (updateError) {
-      notifications.show({
-        title: "No se pudo actualizar el stock",
-        message: updateError.message,
-        color: "red"
-      });
-      return;
-    }
-
-    // 2. Registrar el cambio en la tabla de stock_changes
-    const { error: changeError } = await supabase.from("elianamaipu_stock_changes").insert({
+    const { error } = await supabase.from("elianamaipu_stock_changes").insert({
       shift_id: activeShift.id,
-      product_id: productId,
+      product_id: product.id,
       product_name: product.name,
       quantity_added: quantity,
-      stock_before: stockBefore,
-      stock_after: stockAfter,
+      stock_before: product.stock,
+      stock_after: product.stock,
       modified_by: activeShift.seller
     });
 
-    if (changeError) {
+    if (error) {
       notifications.show({
-        title: "Stock actualizado pero no se registró el cambio",
-        message: changeError.message,
-        color: "orange"
+        title: "No se pudo crear la solicitud",
+        message: error.message,
+        color: "red"
       });
-      await queryClient.invalidateQueries({ queryKey: ["products"] });
-      return;
+      return false;
     }
 
     notifications.show({
-      title: "Stock actualizado",
-      message: `${product.name}: ${stockBefore} → ${stockAfter} unidades`,
-      color: "teal"
+      title: "Solicitud enviada",
+      message: `${product.name}: +${quantity} unidades pendientes de aprobación.`,
+      color: "blue"
     });
 
-    quickStockModalHandlers.close();
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["products"] }),
-      queryClient.invalidateQueries({ queryKey: ["stock-changes"] })
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ["stock-changes"] });
+    return true;
+  };
+
+  const handleApproveStockRequest = async (requestId: string) => {
+    if (stockRequestActionId) return;
+    setStockRequestActionId(requestId);
+
+    try {
+      const request = pendingStockRequests.find((item) => item.id === requestId);
+      if (!request) {
+        notifications.show({
+          title: "Solicitud no disponible",
+          message: "La solicitud ya fue procesada en otro dispositivo.",
+          color: "orange"
+        });
+        return;
+      }
+
+      // Elimina primero la solicitud pendiente para evitar aprobaciones dobles en paralelo.
+      const { data: deletedRows, error: deleteError } = await supabase
+        .from("elianamaipu_stock_changes")
+        .delete()
+        .eq("id", requestId)
+        .eq("stock_before", request.stock_before)
+        .eq("stock_after", request.stock_before)
+        .select("*");
+
+      if (deleteError) {
+        notifications.show({
+          title: "No se pudo bloquear la solicitud",
+          message: deleteError.message,
+          color: "red"
+        });
+        return;
+      }
+
+      if (!deletedRows || deletedRows.length === 0) {
+        notifications.show({
+          title: "Solicitud ya procesada",
+          message: "Otro dispositivo la aceptó o denegó antes que tú.",
+          color: "orange"
+        });
+        return;
+      }
+
+      const lockedRequest = deletedRows[0];
+      const quantity = toNumber(lockedRequest.quantity_added);
+      let productName = lockedRequest.product_name as string;
+      let stockBefore = 0;
+      let stockAfter = 0;
+      let stockUpdated = false;
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const { data: productRow, error: fetchProductError } = await supabase
+          .from("elianamaipu_products")
+          .select("id, name, stock")
+          .eq("id", lockedRequest.product_id)
+          .maybeSingle();
+
+        if (fetchProductError || !productRow) {
+          await supabase.from("elianamaipu_stock_changes").insert(lockedRequest);
+          notifications.show({
+            title: "Producto no encontrado",
+            message: "Se revirtió la solicitud para evitar inconsistencias.",
+            color: "red"
+          });
+          return;
+        }
+
+        productName = normalizeString(productRow.name, productName);
+        stockBefore = toNumber(productRow.stock);
+        stockAfter = stockBefore + quantity;
+
+        const { data: updatedRows, error: updateError } = await supabase
+          .from("elianamaipu_products")
+          .update({ stock: stockAfter })
+          .eq("id", productRow.id)
+          .eq("stock", stockBefore)
+          .select("id");
+
+        if (updateError) {
+          await supabase.from("elianamaipu_stock_changes").insert(lockedRequest);
+          notifications.show({
+            title: "No se pudo aprobar la solicitud",
+            message: updateError.message,
+            color: "red"
+          });
+          return;
+        }
+
+        if (updatedRows && updatedRows.length > 0) {
+          stockUpdated = true;
+          break;
+        }
+      }
+
+      if (!stockUpdated) {
+        await supabase.from("elianamaipu_stock_changes").insert(lockedRequest);
+        notifications.show({
+          title: "Conflicto al aprobar solicitud",
+          message: "No se pudo actualizar stock de forma segura. Reintenta.",
+          color: "red"
+        });
+        return;
+      }
+
+      const { error: changeError } = await supabase.from("elianamaipu_stock_changes").insert({
+        shift_id: lockedRequest.shift_id,
+        product_id: lockedRequest.product_id,
+        product_name: productName,
+        quantity_added: quantity,
+        stock_before: stockBefore,
+        stock_after: stockAfter,
+        modified_by: `${activeShift?.seller ?? "Mostrador"} (aprobado)`
+      });
+
+      if (changeError) {
+        notifications.show({
+          title: "Stock actualizado con advertencia",
+          message: "Se aprobó el stock, pero no se pudo guardar el registro histórico.",
+          color: "orange"
+        });
+      } else {
+        notifications.show({
+          title: "Solicitud aprobada",
+          message: `${productName}: ${stockBefore} → ${stockAfter} unidades.`,
+          color: "teal"
+        });
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["stock-changes"] })
+      ]);
+    } finally {
+      setStockRequestActionId(null);
+    }
+  };
+
+  const handleDenyStockRequest = async (requestId: string) => {
+    if (stockRequestActionId) return;
+    setStockRequestActionId(requestId);
+
+    try {
+      const { data, error } = await supabase
+        .from("elianamaipu_stock_changes")
+        .delete()
+        .eq("id", requestId)
+        .select("id");
+
+      if (error) {
+        notifications.show({
+          title: "No se pudo denegar la solicitud",
+          message: error.message,
+          color: "red"
+        });
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        notifications.show({
+          title: "Solicitud ya procesada",
+          message: "La solicitud ya no existe en el sistema.",
+          color: "orange"
+        });
+        return;
+      }
+
+      notifications.show({
+        title: "Solicitud denegada",
+        message: "La solicitud fue eliminada correctamente.",
+        color: "gray"
+      });
+      await queryClient.invalidateQueries({ queryKey: ["stock-changes"] });
+    } finally {
+      setStockRequestActionId(null);
+    }
   };
 
   const handleDownloadShiftPDF = async (shift: Shift) => {
@@ -3090,7 +3305,7 @@ const App = () => {
         shift,
         sales: shiftSales,
         expenses: expenses || [],
-        stockChanges: stockChanges || []
+        stockChanges: (stockChanges || []).filter((change) => !isPendingStockRequest(change as StockChange))
       });
 
       notifications.show({
@@ -3502,7 +3717,7 @@ const App = () => {
     });
 
     const topProducts = Array.from(productMap.values())
-      .sort((a, b) => b.quantity - a.quantity)
+      .sort((a, b) => b.quantity - a.quantity || b.total - a.total)
       .slice(0, 20)
       .map((item) => ({
         ...item,
@@ -4035,58 +4250,112 @@ const App = () => {
                           </div>
                           <ScrollArea h={isMobile ? 400 : 720}>
                             <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
-                              {filteredProducts.map((product) => {
+                              {filteredProducts.map((product, index) => {
                                 const stockRatio = Math.min(
                                   100,
                                   Math.round((product.stock / Math.max(product.minStock || 1, 1)) * 100)
                                 );
+                                const salesCount = productSalesCount.get(product.id) ?? 0;
+                                const rank = productSalesRanking.get(product.id) ?? index + 1;
+                                const stockStatusColor = product.stock === 0 ? "red" : product.stock <= product.minStock ? "orange" : "teal";
+                                const stockStatusLabel = product.stock === 0 ? "Sin stock" : product.stock <= product.minStock ? "Bajo stock" : "Disponible";
                                 return (
                                   <Card
                                     key={product.id}
                                     withBorder
-                                    shadow="sm"
+                                    shadow="md"
                                     radius="lg"
                                     onClick={() => handleAddProductToCart(product.id)}
-                                    style={{ cursor: "pointer" }}
+                                    style={{
+                                      cursor: "pointer",
+                                      height: "100%",
+                                      minHeight: isMobile ? "220px" : "240px",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.98))",
+                                      borderColor: "rgba(15, 23, 42, 0.08)",
+                                      transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease"
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.transform = "translateY(-2px)";
+                                      e.currentTarget.style.boxShadow = "0 10px 24px rgba(15, 23, 42, 0.14)";
+                                      e.currentTarget.style.borderColor = "rgba(37, 99, 235, 0.25)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.transform = "translateY(0)";
+                                      e.currentTarget.style.boxShadow = "";
+                                      e.currentTarget.style.borderColor = "rgba(15, 23, 42, 0.08)";
+                                    }}
                                   >
-                                    <Stack gap="xs">
-                                      <Group justify="space-between" align="flex-start">
-                                        <Stack gap={4}>
-                                          <Text fw={600}>{product.name}</Text>
-                                          <Text size="sm" c="dimmed">
+                                    <Stack gap="sm" style={{ height: "100%" }}>
+                                      <Group justify="space-between" align="flex-start" wrap="nowrap">
+                                        <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
+                                          <Text fw={700} size="sm" lineClamp={2} style={{ minHeight: "40px", lineHeight: 1.25 }}>
+                                            {product.name}
+                                          </Text>
+                                          <Text size="xs" c="dimmed" lineClamp={1}>
                                             {product.category}
                                           </Text>
                                         </Stack>
-                                        <Badge color="indigo" variant="light">
-                                          {formatCurrency(product.price)}
+                                        <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
+                                          <Badge
+                                            size="xs"
+                                            variant="filled"
+                                            color={getRankBadgeColor(rank - 1)}
+                                            leftSection={<Medal size={11} />}
+                                          >
+                                            #{rank}
+                                          </Badge>
+                                          <Badge color="blue" variant="filled">
+                                            {formatCurrency(product.price)}
+                                          </Badge>
+                                        </Stack>
+                                      </Group>
+
+                                      <Group justify="space-between" wrap="nowrap">
+                                        <Badge variant="light" color="gray">
+                                          Vendidos: {salesCount}
+                                        </Badge>
+                                        <Badge color={stockStatusColor} variant="light">
+                                          {stockStatusLabel}
                                         </Badge>
                                       </Group>
-                                      <Group justify="space-between">
-                                        <Text size="sm" c="dimmed">
-                                          Stock actual: {product.stock}
-                                        </Text>
-                                        <Text size="sm" c="dimmed">
-                                          Mínimo: {product.minStock}
-                                        </Text>
-                                      </Group>
+
+                                      <SimpleGrid cols={2} spacing="xs">
+                                        <Paper withBorder p={6} radius="md">
+                                          <Text size="10px" c="dimmed" tt="uppercase" fw={700}>Stock actual</Text>
+                                          <Text fw={700} size="sm">{product.stock}</Text>
+                                        </Paper>
+                                        <Paper withBorder p={6} radius="md">
+                                          <Text size="10px" c="dimmed" tt="uppercase" fw={700}>Stock mínimo</Text>
+                                          <Text fw={700} size="sm">{product.minStock}</Text>
+                                        </Paper>
+                                      </SimpleGrid>
+
                                       <Progress
                                         value={stockRatio}
-                                        color={stockRatio < 50 ? "orange" : "teal"}
+                                        color={stockStatusColor}
                                         radius="xl"
+                                        size="md"
                                       />
-                                      <Group justify="space-between">
-                                        <Text size="xs" c="dimmed">
+
+                                      <Group justify="space-between" mt="auto" wrap="nowrap">
+                                        <Text
+                                          size="xs"
+                                          c="dimmed"
+                                          style={{
+                                            flex: 1,
+                                            minWidth: 0,
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            whiteSpace: "nowrap"
+                                          }}
+                                        >
                                           {product.barcode ? `SKU: ${product.barcode}` : "Sin código asignado"}
                                         </Text>
-                                        {product.stock <= product.minStock ? (
-                                          <Badge color="orange" variant="light" size="sm">
-                                            Bajo stock
-                                          </Badge>
-                                        ) : (
-                                          <Badge color="teal" variant="light" size="sm">
-                                            Disponible
-                                          </Badge>
-                                        )}
+                                        <Badge color={stockStatusColor} variant="dot" size="sm">
+                                          {stockStatusLabel}
+                                        </Badge>
                                       </Group>
                                     </Stack>
                                   </Card>
@@ -4143,7 +4412,7 @@ const App = () => {
                                   <DollarSign size={18} />
                                 </ActionIcon>
                               </Tooltip>
-                              <Tooltip label="Agregar stock rápido">
+                              <Tooltip label="Solicitar aumento de stock">
                                 <ActionIcon
                                   variant="light"
                                   color="teal"
@@ -4304,7 +4573,8 @@ const App = () => {
                               <Button
                                 leftSection={<Receipt size={18} />}
                                 onClick={handleCompleteSale}
-                                disabled={cartDetailed.length === 0}
+                                disabled={cartDetailed.length === 0 || isCompletingSale}
+                                loading={isCompletingSale}
                                 fullWidth
                               >
                                 Cobrar y generar ticket
@@ -4329,6 +4599,11 @@ const App = () => {
             {activeTab === "inventory" && (
               <InventoryView
                 products={products}
+                productSalesCount={productSalesCount}
+                stockRequests={pendingStockRequests}
+                onApproveStockRequest={handleApproveStockRequest}
+                onDenyStockRequest={handleDenyStockRequest}
+                requestActionId={stockRequestActionId}
                 search={inventorySearch}
                 onSearchChange={setInventorySearch}
                 categoryFilter={inventoryCategoryFilter}
@@ -4470,10 +4745,10 @@ const App = () => {
         activeShift={activeShift}
       />
 
-      <QuickStockModal
+      <StockRequestModal
         opened={quickStockModalOpened}
         onClose={quickStockModalHandlers.close}
-        onAddStock={handleQuickAddStock}
+        onRequestStock={handleCreateStockRequest}
         products={products}
         activeShift={activeShift}
       />
@@ -4591,6 +4866,11 @@ type ProductInput = {
 
 interface InventoryViewProps {
   products: Product[];
+  productSalesCount: Map<string, number>;
+  stockRequests: StockChange[];
+  onApproveStockRequest: (requestId: string) => void;
+  onDenyStockRequest: (requestId: string) => void;
+  requestActionId: string | null;
   search: string;
   onSearchChange: (value: string) => void;
   categoryFilter: string | null;
@@ -4606,6 +4886,11 @@ interface InventoryViewProps {
 
 const InventoryView = ({
   products,
+  productSalesCount,
+  stockRequests,
+  onApproveStockRequest,
+  onDenyStockRequest,
+  requestActionId,
   search,
   onSearchChange,
   categoryFilter,
@@ -4646,8 +4931,12 @@ const InventoryView = ({
       filtered = filtered.filter((p) => p.stock === 0);
     }
 
-    return filtered;
-  }, [products, search, categoryFilter, stockFilter]);
+    return [...filtered].sort((a, b) => {
+      const salesA = productSalesCount.get(a.id) ?? 0;
+      const salesB = productSalesCount.get(b.id) ?? 0;
+      return salesB - salesA || a.name.localeCompare(b.name, "es");
+    });
+  }, [products, search, categoryFilter, stockFilter, productSalesCount]);
 
   const totalProducts = products.length;
   const totalValue = useMemo(() => products.reduce((acc, p) => acc + p.price * p.stock, 0), [products]);
@@ -4821,6 +5110,74 @@ const InventoryView = ({
         </Stack>
       </Card>
 
+      <Card withBorder radius="lg">
+        <Stack gap="md">
+          <Group justify="space-between" align="center">
+            <Title order={4}>Solicitudes de aumento de stock</Title>
+            <Badge variant="light" color={stockRequests.length > 0 ? "orange" : "teal"}>
+              {stockRequests.length} pendientes
+            </Badge>
+          </Group>
+          {stockRequests.length === 0 ? (
+            <Paper withBorder p="md" radius="md">
+              <Text c="dimmed">No hay solicitudes pendientes.</Text>
+            </Paper>
+          ) : (
+            <ScrollArea h={280}>
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Fecha</Table.Th>
+                    <Table.Th>Producto</Table.Th>
+                    <Table.Th>Cantidad</Table.Th>
+                    <Table.Th>Solicitado por</Table.Th>
+                    <Table.Th style={{ textAlign: "right", width: 240 }}>Acciones</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {stockRequests.map((request) => {
+                    const inProgress = requestActionId === request.id;
+                    return (
+                      <Table.Tr key={request.id}>
+                        <Table.Td>{formatDateTime(request.created_at)}</Table.Td>
+                        <Table.Td>{request.product_name}</Table.Td>
+                        <Table.Td>
+                          <Badge color="blue" variant="light">+{request.quantity_added}</Badge>
+                        </Table.Td>
+                        <Table.Td>{request.modified_by}</Table.Td>
+                        <Table.Td>
+                          <Group justify="flex-end" gap="xs">
+                            <Button
+                              size="xs"
+                              color="teal"
+                              loading={inProgress}
+                              disabled={Boolean(requestActionId) && !inProgress}
+                              onClick={() => onApproveStockRequest(request.id)}
+                            >
+                              Aceptar
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="light"
+                              color="red"
+                              loading={inProgress}
+                              disabled={Boolean(requestActionId) && !inProgress}
+                              onClick={() => onDenyStockRequest(request.id)}
+                            >
+                              Denegar
+                            </Button>
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            </ScrollArea>
+          )}
+        </Stack>
+      </Card>
+
       {/* Vista de tarjetas de productos */}
       {filteredProducts.length === 0 ? (
         <Card withBorder radius="lg" p="xl">
@@ -4830,7 +5187,7 @@ const InventoryView = ({
         </Card>
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing="md">
-          {filteredProducts.map((product) => {
+          {filteredProducts.map((product, index) => {
             let statusColor = "teal";
             let statusLabel = "Normal";
 
@@ -4875,10 +5232,19 @@ const InventoryView = ({
                     {product.name}
                   </Text>
 
-                  {/* Categoría */}
-                  <Badge variant="light" color="indigo" size="sm">
-                    {product.category}
-                  </Badge>
+                  <Group justify="space-between" align="center">
+                    <Badge variant="light" color="indigo" size="sm">
+                      {product.category}
+                    </Badge>
+                    <Badge
+                      size="sm"
+                      variant="light"
+                      color={getRankBadgeColor(index)}
+                      leftSection={<Medal size={12} />}
+                    >
+                      #{index + 1}
+                    </Badge>
+                  </Group>
 
                   <Divider />
 
@@ -4992,26 +5358,14 @@ const DashboardView = ({
   const salesOnly = useMemo(() => shiftSales.filter((sale) => sale.type === "sale"), [shiftSales]);
   const returns = useMemo(() => shiftSales.filter((sale) => sale.type === "return"), [shiftSales]);
   const returnsTotal = useMemo(() => returns.reduce((acc, sale) => acc + sale.total, 0), [returns]);
-  const fiadoTotal = useMemo(
-    () => salesOnly.filter((sale) => sale.paymentMethod === "fiado").reduce((acc, sale) => acc + sale.total, 0),
-    [salesOnly]
-  );
-  const staffTotal = useMemo(
-    () => salesOnly.filter((sale) => sale.paymentMethod === "staff").reduce((acc, sale) => acc + sale.total, 0),
-    [salesOnly]
-  );
-
-  const paymentData = Object.entries(shiftSummary.byPayment)
-    .filter(([, value]) => value > 0)
-    .map(([method, value]) => {
-      const option = PAYMENT_OPTIONS.find((opt) => opt.id === method)!;
-      return {
-        name: option.label,
-        value,
-        method: method as PaymentMethod,
-        color: PAYMENT_COLORS[method as PaymentMethod]
-      };
-    });
+  const paymentData = PAYMENT_ORDER
+    .map((method) => ({
+      name: PAYMENT_LABELS[method],
+      value: shiftSummary.byPayment[method],
+      method,
+      color: PAYMENT_COLORS[method]
+    }))
+    .filter((item) => item.value > 0);
 
   const topProducts = useMemo(() => {
     const productSales = new Map<string, { name: string; quantity: number; revenue: number }>();
@@ -5026,7 +5380,7 @@ const DashboardView = ({
       });
     });
     return Array.from(productSales.values())
-      .sort((a, b) => b.revenue - a.revenue)
+      .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
       .slice(0, 5);
   }, [salesOnly]);
 
@@ -5255,7 +5609,7 @@ const DashboardView = ({
                         </Table.Td>
                         <Table.Td>
                           <Badge variant="dot">
-                            {payment?.label ?? sale.paymentMethod.toUpperCase()}
+                            {payment?.label ?? PAYMENT_LABELS[sale.paymentMethod] ?? sale.paymentMethod.toUpperCase()}
                           </Badge>
                         </Table.Td>
                         <Table.Td style={{ textAlign: "right" }}>
@@ -5311,9 +5665,10 @@ const DashboardView = ({
                   <Stack gap="xs">
                     <Group justify="space-between">
                       <Badge
-                        size="lg"
-                        variant="filled"
-                        color={index === 0 ? "yellow" : "indigo"}
+                        size="sm"
+                        variant="light"
+                        color={getRankBadgeColor(index)}
+                        leftSection={<Medal size={12} />}
                       >
                         #{index + 1}
                       </Badge>
@@ -5922,6 +6277,7 @@ const ReportsView = ({ filters, onChangeFilters, summary }: ReportsViewProps) =>
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
+                      <Table.Th style={{ width: 90, textAlign: "center" }}>Ranking</Table.Th>
                       <Table.Th>Producto</Table.Th>
                       <Table.Th>Cantidad</Table.Th>
                       <Table.Th>Total</Table.Th>
@@ -5929,8 +6285,18 @@ const ReportsView = ({ filters, onChangeFilters, summary }: ReportsViewProps) =>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {summary.topProducts.map((product) => (
+                    {summary.topProducts.map((product, index) => (
                       <Table.Tr key={product.id}>
+                        <Table.Td style={{ textAlign: "center" }}>
+                          <Badge
+                            size="sm"
+                            variant="light"
+                            color={getRankBadgeColor(index)}
+                            leftSection={<Medal size={12} />}
+                          >
+                            #{index + 1}
+                          </Badge>
+                        </Table.Td>
                         <Table.Td>{product.name}</Table.Td>
                         <Table.Td>{product.quantity}</Table.Td>
                         <Table.Td>{formatCurrency(product.total)}</Table.Td>
@@ -5968,7 +6334,7 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
 
   const activeShiftStockChanges = useMemo(() => {
     if (!activeShift) return [];
-    return stockChanges.filter((change) => change.shift_id === activeShift.id);
+    return stockChanges.filter((change) => change.shift_id === activeShift.id && !isPendingStockRequest(change));
   }, [stockChanges, activeShift]);
 
   // Función para obtener gastos de un turno específico
@@ -5978,7 +6344,7 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
 
   // Función para obtener cambios de stock de un turno específico
   const getShiftStockChanges = (shiftId: string) => {
-    return stockChanges.filter((change) => change.shift_id === shiftId);
+    return stockChanges.filter((change) => change.shift_id === shiftId && !isPendingStockRequest(change));
   };
 
   const closedCount = history.length;
@@ -6007,7 +6373,7 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
       });
     });
 
-    return Array.from(productMap.values()).sort((a, b) => b.total - a.total);
+    return Array.from(productMap.values()).sort((a, b) => b.quantity - a.quantity || b.total - a.total);
   };
 
   return (
@@ -6214,11 +6580,11 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
                       DESGLOSE POR MÉTODO DE PAGO
                     </Text>
                     <Grid gutter="xs">
-                      {Object.entries(summary.byPayment).map(([method, value]) => (
+                      {PAYMENT_ORDER.map((method) => (
                         <Grid.Col key={method} span={6}>
                           <Group justify="space-between">
-                            <Text size="sm">{PAYMENT_LABELS[method as PaymentMethod]}</Text>
-                            <Text fw={600}>{formatCurrency(value)}</Text>
+                            <Text size="sm">{PAYMENT_LABELS[method]}</Text>
+                            <Text fw={600}>{formatCurrency(summary.byPayment[method])}</Text>
                           </Group>
                         </Grid.Col>
                       ))}
@@ -6505,14 +6871,14 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
                                 <Text fw={600}>Desglose por método de pago</Text>
                               </Group>
                               <Grid gutter="md">
-                                {Object.entries(shift.payments_breakdown).map(([method, value]) => (
+                                {PAYMENT_ORDER.map((method) => (
                                   <Grid.Col key={method} span={{ base: 6, sm: 4, md: 3 }}>
                                     <Paper withBorder p="xs" radius="sm">
                                       <Stack gap={4}>
                                         <Text size="xs" c="dimmed">
-                                          {PAYMENT_LABELS[method as PaymentMethod]}
+                                          {PAYMENT_LABELS[method]}
                                         </Text>
-                                        <Text fw={600}>{formatCurrency(value)}</Text>
+                                        <Text fw={600}>{formatCurrency(shift.payments_breakdown?.[method] ?? 0)}</Text>
                                       </Stack>
                                     </Paper>
                                   </Grid.Col>
@@ -6534,6 +6900,7 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
                                 <Table highlightOnHover>
                                   <Table.Thead>
                                     <Table.Tr>
+                                      <Table.Th style={{ textAlign: "center", width: 90 }}>Ranking</Table.Th>
                                       <Table.Th>Producto</Table.Th>
                                       <Table.Th>Cantidad</Table.Th>
                                       <Table.Th>Total</Table.Th>
@@ -6542,6 +6909,16 @@ const ShiftsView = ({ activeShift, summary, history, sales, products, expenses, 
                                   <Table.Tbody>
                                     {shiftProducts.map((product, idx) => (
                                       <Table.Tr key={idx}>
+                                        <Table.Td style={{ textAlign: "center" }}>
+                                          <Badge
+                                            size="sm"
+                                            variant="light"
+                                            color={getRankBadgeColor(idx)}
+                                            leftSection={<Medal size={12} />}
+                                          >
+                                            #{idx + 1}
+                                          </Badge>
+                                        </Table.Td>
                                         <Table.Td>
                                           <Text fw={500}>{product.name}</Text>
                                         </Table.Td>
