@@ -215,6 +215,27 @@ const PAYMENT_LABELS: Record<PaymentMethod, string> = {
 
 const PAYMENT_ORDER: PaymentMethod[] = ["cash", "card", "transfer", "fiado"];
 const DUPLICATE_SALE_WINDOW_MS = 60 * 1000;
+const createEmptyPaymentBreakdown = (): Record<PaymentMethod, number> => ({
+  cash: 0,
+  card: 0,
+  transfer: 0,
+  fiado: 0,
+  staff: 0
+});
+
+interface ShiftActivitySnapshot {
+  salesCount: number;
+  expenseCount: number;
+  stockChangeCount: number;
+  lastActivityAt: number;
+}
+
+const EMPTY_SHIFT_ACTIVITY: ShiftActivitySnapshot = {
+  salesCount: 0,
+  expenseCount: 0,
+  stockChangeCount: 0,
+  lastActivityAt: 0
+};
 
 const getRankBadgeColor = (index: number) => {
   if (index === 0) return "yellow";
@@ -424,13 +445,7 @@ const computeShiftSummary = (sales: Sale[], shiftId: string | null | undefined):
   const result: ShiftSummary = {
     total: 0,
     tickets: 0,
-    byPayment: {
-      cash: 0,
-      card: 0,
-      transfer: 0,
-      fiado: 0,
-      staff: 0
-    }
+    byPayment: createEmptyPaymentBreakdown()
   };
 
   filtered.forEach((sale) => {
@@ -979,13 +994,25 @@ interface ShiftModalProps {
   onClose: () => void;
   onOpenShift: (payload: { seller: string; type: ShiftType; initialCash: number }) => void;
   onCloseShift: (payload: { cashCounted: number }) => void;
+  isSubmitting: boolean;
   summary: ShiftSummary & { cashExpected: number };
   activeShift?: Shift;
   sales?: Sale[];
   products?: Product[];
 }
 
-const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary, activeShift, sales = [], products = [] }: ShiftModalProps) => {
+const ShiftModal = ({
+  opened,
+  mode,
+  onClose,
+  onOpenShift,
+  onCloseShift,
+  isSubmitting,
+  summary,
+  activeShift,
+  sales = [],
+  products = []
+}: ShiftModalProps) => {
   const [seller, setSeller] = useState("");
   const [shiftType, setShiftType] = useState<ShiftType>("dia");
   const [initialCash, setInitialCash] = useState<number | undefined>(undefined);
@@ -1190,12 +1217,15 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
               <Button
                 variant="default"
                 onClick={onClose}
+                disabled={isSubmitting}
               >
                 Cancelar
               </Button>
               <Button
                 color="teal"
                 leftSection={<BadgeCheck size={18} />}
+                loading={isSubmitting}
+                disabled={isSubmitting}
                 onClick={() => {
                   if (countedValue === undefined) {
                     notifications.show({
@@ -1254,10 +1284,12 @@ const ShiftModal = ({ opened, mode, onClose, onOpenShift, onCloseShift, summary,
           Mantén el control en tiempo real del efectivo durante el turno.
         </Badge>
         <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
+          <Button variant="default" onClick={onClose} disabled={isSubmitting}>
             Cancelar
           </Button>
           <Button
+            loading={isSubmitting}
+            disabled={isSubmitting}
             onClick={() => {
               if (!seller.trim()) {
                 notifications.show({
@@ -2123,6 +2155,7 @@ const App = () => {
 
   const [shiftModalOpened, shiftModalHandlers] = useDisclosure(false);
   const [shiftModalMode, setShiftModalMode] = useState<"open" | "close">("open");
+  const [isShiftSubmitting, setIsShiftSubmitting] = useState(false);
 
   const [lowStockModalOpened, lowStockModalHandlers] = useDisclosure(false);
 
@@ -2236,6 +2269,47 @@ const App = () => {
   const shifts = shiftsQuery.data ?? [];
   const expenses = expensesQuery.data ?? [];
   const stockChanges = stockChangesQuery.data ?? [];
+  const shiftActivityMap = useMemo(() => {
+    const activityMap = new Map<string, ShiftActivitySnapshot>();
+
+    const ensureShiftActivity = (shiftId: string | null | undefined) => {
+      if (!shiftId) return null;
+      const existing = activityMap.get(shiftId);
+      if (existing) return existing;
+
+      const nextActivity: ShiftActivitySnapshot = { ...EMPTY_SHIFT_ACTIVITY };
+      activityMap.set(shiftId, nextActivity);
+      return nextActivity;
+    };
+
+    sales.forEach((sale) => {
+      const activity = ensureShiftActivity(sale.shiftId);
+      if (!activity) return;
+
+      activity.salesCount += 1;
+      activity.lastActivityAt = Math.max(activity.lastActivityAt, dayjs(sale.created_at).valueOf());
+    });
+
+    expenses.forEach((expense) => {
+      const activity = ensureShiftActivity(expense.shift_id);
+      if (!activity) return;
+
+      activity.expenseCount += 1;
+      activity.lastActivityAt = Math.max(activity.lastActivityAt, dayjs(expense.created_at).valueOf());
+    });
+
+    stockChanges.forEach((change) => {
+      if (isPendingStockRequest(change)) return;
+
+      const activity = ensureShiftActivity(change.shift_id);
+      if (!activity) return;
+
+      activity.stockChangeCount += 1;
+      activity.lastActivityAt = Math.max(activity.lastActivityAt, dayjs(change.created_at).valueOf());
+    });
+
+    return activityMap;
+  }, [sales, expenses, stockChanges]);
   const pendingStockRequests = useMemo(
     () =>
       stockChanges
@@ -2243,8 +2317,43 @@ const App = () => {
         .sort((a, b) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf()),
     [stockChanges]
   );
-  const activeShift = useMemo(() => shifts.find((shift) => shift.status === "open"), [shifts]);
+  const openShifts = useMemo(
+    () =>
+      shifts
+        .filter((shift) => shift.status === "open")
+        .sort((left, right) => {
+          const leftActivity = shiftActivityMap.get(left.id) ?? EMPTY_SHIFT_ACTIVITY;
+          const rightActivity = shiftActivityMap.get(right.id) ?? EMPTY_SHIFT_ACTIVITY;
+          const leftHasActivity = leftActivity.lastActivityAt > 0;
+          const rightHasActivity = rightActivity.lastActivityAt > 0;
+
+          if (leftHasActivity !== rightHasActivity) {
+            return leftHasActivity ? -1 : 1;
+          }
+
+          if (leftActivity.lastActivityAt !== rightActivity.lastActivityAt) {
+            return rightActivity.lastActivityAt - leftActivity.lastActivityAt;
+          }
+
+          return dayjs(right.start).valueOf() - dayjs(left.start).valueOf();
+        }),
+    [shifts, shiftActivityMap]
+  );
+  const activeShift = openShifts[0];
+  const duplicateOpenShifts = activeShift ? openShifts.filter((shift) => shift.id !== activeShift.id) : [];
   const shiftSummary = useMemo(() => computeShiftSummary(sales, activeShift?.id ?? null), [sales, activeShift]);
+
+  useEffect(() => {
+    if (duplicateOpenShifts.length === 0) return;
+
+    notifications.show({
+      id: "duplicate-open-shifts",
+      title: "Turnos abiertos duplicados",
+      message: `Se detectaron ${openShifts.length} turnos abiertos. El sistema usará el turno con actividad y limpiará los duplicados sin movimientos al cerrar.`,
+      color: "orange",
+      autoClose: 7000
+    });
+  }, [duplicateOpenShifts.length, openShifts.length]);
 
   const productMap = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const cartDetailed = useMemo(() => {
@@ -2881,87 +2990,180 @@ const App = () => {
   };
 
   const handleOpenShift = async ({ seller, type, initialCash }: { seller: string; type: ShiftType; initialCash: number }) => {
-    const { error } = await supabase.from("elianamaipu_shifts").insert({
-      seller,
-      type,
-      start_time: new Date().toISOString(),
-      status: "open",
-      initial_cash: initialCash
-    });
+    if (isShiftSubmitting) return;
 
-    if (error) {
+    if (openShifts.length > 0) {
       notifications.show({
-        title: "No se pudo abrir el turno",
-        message: error.message,
-        color: "red"
+        title: "Ya hay un turno abierto",
+        message: "Cierra el turno activo antes de abrir uno nuevo para evitar duplicados.",
+        color: "orange"
       });
       return;
     }
 
-    notifications.show({
-      title: "Turno iniciado",
-      message: `Turno ${type === "dia" ? "día" : "noche"} para ${seller} con ${formatCurrency(initialCash)} inicial.`,
-      color: "teal"
-    });
-    await queryClient.invalidateQueries({ queryKey: ["shifts"] });
-    shiftModalHandlers.close();
+    setIsShiftSubmitting(true);
+
+    try {
+      const { error } = await supabase.from("elianamaipu_shifts").insert({
+        seller,
+        type,
+        start_time: new Date().toISOString(),
+        status: "open",
+        initial_cash: initialCash
+      });
+
+      if (error) {
+        notifications.show({
+          title: "No se pudo abrir el turno",
+          message: error.message,
+          color: "red"
+        });
+        return;
+      }
+
+      notifications.show({
+        title: "Turno iniciado",
+        message: `Turno ${type === "dia" ? "día" : "noche"} para ${seller} con ${formatCurrency(initialCash)} inicial.`,
+        color: "teal"
+      });
+
+      shiftModalHandlers.close();
+      void queryClient.invalidateQueries({ queryKey: ["shifts"] });
+    } finally {
+      setIsShiftSubmitting(false);
+    }
   };
 
   const handleCloseShift = async ({ cashCounted }: { cashCounted: number }) => {
-    if (!activeShift) return;
+    if (!activeShift || isShiftSubmitting) return;
 
-    // OBTENER GASTOS DIRECTAMENTE DESDE LA BASE DE DATOS
-    const { data: expensesData, error: expensesError } = await supabase
-      .from("elianamaipu_expenses")
-      .select("amount")
-      .eq("shift_id", activeShift.id);
+    setIsShiftSubmitting(true);
 
-    if (expensesError) {
-      console.error("Error obteniendo gastos:", expensesError);
-    }
+    try {
+      const duplicateShiftSnapshots = duplicateOpenShifts.map((shift) => ({
+        shift,
+        activity: shiftActivityMap.get(shift.id) ?? EMPTY_SHIFT_ACTIVITY
+      }));
+      const staleDuplicateShiftIds = duplicateShiftSnapshots
+        .filter(({ activity }) => activity.lastActivityAt === 0)
+        .map(({ shift }) => shift.id);
+      const duplicateShiftsWithActivity = duplicateShiftSnapshots.filter(({ activity }) => activity.lastActivityAt > 0);
 
-    // Calcular el total de gastos sumando desde la BD
-    const totalExpenses = (expensesData || []).reduce((sum, exp) => sum + exp.amount, 0);
+      const { data: expensesData, error: expensesError } = await supabase
+        .from("elianamaipu_expenses")
+        .select("amount")
+        .eq("shift_id", activeShift.id);
 
-    const summary = computeShiftSummary(sales, activeShift.id);
-    const initialCash = activeShift.initial_cash ?? 0;
+      if (expensesError) {
+        console.error("Error obteniendo gastos:", expensesError);
+      }
 
-    // Efectivo esperado = inicial + ventas en efectivo - gastos del turno
-    const cashExpected = initialCash + (summary.byPayment.cash ?? 0) - totalExpenses;
-    const difference = cashCounted - cashExpected;
+      const totalExpenses = (expensesData || []).reduce((sum, exp) => sum + exp.amount, 0);
+      const summary = computeShiftSummary(sales, activeShift.id);
+      const initialCash = activeShift.initial_cash ?? 0;
+      const cashExpected = initialCash + (summary.byPayment.cash ?? 0) - totalExpenses;
+      const difference = cashCounted - cashExpected;
+      const closedAt = new Date().toISOString();
 
-    const { error } = await supabase
-      .from("elianamaipu_shifts")
-      .update({
-        end_time: new Date().toISOString(),
-        status: "closed",
-        cash_counted: cashCounted,
-        cash_expected: cashExpected,
-        difference,
-        total_sales: summary.total,
-        tickets: summary.tickets,
-        payments_breakdown: summary.byPayment,
-        total_expenses: totalExpenses // Guardar el total calculado
-      })
-      .eq("id", activeShift.id);
+      const { error } = await supabase
+        .from("elianamaipu_shifts")
+        .update({
+          end_time: closedAt,
+          status: "closed",
+          cash_counted: cashCounted,
+          cash_expected: cashExpected,
+          difference,
+          total_sales: summary.total,
+          tickets: summary.tickets,
+          payments_breakdown: summary.byPayment,
+          total_expenses: totalExpenses
+        })
+        .eq("id", activeShift.id);
 
-    if (error) {
-      notifications.show({
-        title: "No se pudo cerrar el turno",
-        message: error.message,
-        color: "red"
+      if (error) {
+        notifications.show({
+          title: "No se pudo cerrar el turno",
+          message: error.message,
+          color: "red"
+        });
+        return;
+      }
+
+      if (staleDuplicateShiftIds.length > 0) {
+        const { error: staleCleanupError } = await supabase
+          .from("elianamaipu_shifts")
+          .update({
+            end_time: closedAt,
+            status: "closed",
+            total_sales: 0,
+            tickets: 0,
+            payments_breakdown: createEmptyPaymentBreakdown(),
+            total_expenses: 0
+          })
+          .in("id", staleDuplicateShiftIds);
+
+        if (staleCleanupError) {
+          console.warn("No se pudieron cerrar los turnos duplicados sin movimiento:", staleCleanupError.message);
+        }
+      }
+
+      queryClient.setQueryData<Shift[]>(["shifts"], (current) => {
+        if (!current) return current;
+
+        return current.map((shift) => {
+          if (shift.id === activeShift.id) {
+            return {
+              ...shift,
+              end: closedAt,
+              status: "closed",
+              cash_counted: cashCounted,
+              cash_expected: cashExpected,
+              difference,
+              total_sales: summary.total,
+              tickets: summary.tickets,
+              payments_breakdown: summary.byPayment,
+              total_expenses: totalExpenses
+            };
+          }
+
+          if (staleDuplicateShiftIds.includes(shift.id)) {
+            return {
+              ...shift,
+              end: closedAt,
+              status: "closed",
+              total_sales: 0,
+              tickets: 0,
+              payments_breakdown: createEmptyPaymentBreakdown(),
+              total_expenses: 0
+            };
+          }
+
+          return shift;
+        });
       });
-      return;
+
+      notifications.show({
+        title: "Turno cerrado",
+        message:
+          staleDuplicateShiftIds.length > 0
+            ? `Se registró el cierre de caja y se limpiaron ${staleDuplicateShiftIds.length} turnos duplicados sin movimiento.`
+            : "Se registró el cierre de caja correctamente.",
+        color: difference === 0 ? "teal" : difference > 0 ? "green" : "orange"
+      });
+
+      if (duplicateShiftsWithActivity.length > 0) {
+        notifications.show({
+          title: "Revisión requerida",
+          message: `Quedaron ${duplicateShiftsWithActivity.length} turnos abiertos con movimientos. Revísalos antes de seguir vendiendo.`,
+          color: "orange"
+        });
+      }
+
+      shiftModalHandlers.close();
+      void queryClient.invalidateQueries({ queryKey: ["shifts"] });
+    } finally {
+      setIsShiftSubmitting(false);
     }
-
-    notifications.show({
-      title: "Turno cerrado",
-      message: "Se registró el cierre de caja correctamente.",
-      color: difference === 0 ? "teal" : difference > 0 ? "green" : "orange"
-    });
-
-    await queryClient.invalidateQueries({ queryKey: ["shifts"] });
-    shiftModalHandlers.close();
   };
 
   const handleRegisterExpense = async ({
@@ -4732,6 +4934,7 @@ const App = () => {
         onClose={shiftModalHandlers.close}
         onOpenShift={handleOpenShift}
         onCloseShift={handleCloseShift}
+        isSubmitting={isShiftSubmitting}
         summary={{ ...shiftSummary, cashExpected: (activeShift?.initial_cash ?? 0) + (shiftSummary.byPayment.cash ?? 0) }}
         activeShift={activeShift}
         sales={sales}
